@@ -13,7 +13,7 @@ class CapabilitySchema(BaseModel):
     id: str
     input_schema: Dict[str, Any]
     output_schema: Dict[str, Any]
-    auth: Dict[str, str] = Field(alias="auth_type")
+    auth_type: Dict[str, str]
 
 
 class AgentManifest(BaseModel):
@@ -38,7 +38,7 @@ class AgentResponse(BaseModel):
     name: str
     description: str
     version: str
-    invoke_endpoint: str
+    invoke_endpoint: Optional[str] = None
     manifest_json: Dict[str, Any]
     tags: List[str]
     trust_verification: str
@@ -57,10 +57,12 @@ class AgentListResponse(BaseModel):
     name: str
     description: str
     version: str
+    invoke_endpoint: Optional[str] = None
     tags: List[str]
     trust_verification: str
     is_active: bool
     created_at: datetime
+    capabilities: List[CapabilitySchema] = []
 
 
 class AgentSearchQuery(BaseModel):

@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 from uuid import UUID
 
 from sqlalchemy import ARRAY, Boolean, Column, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 
@@ -18,7 +18,7 @@ class Agent(BaseModel):
 
     agent_id: Column[str] = Column(String, nullable=False, unique=True, index=True)
     user_id: Column[UUID] = Column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+        PostgresUUID, ForeignKey("users.id"), nullable=False
     )
     name: Column[str] = Column(String, nullable=False)
     description: Column[str] = Column(Text, nullable=False)
@@ -49,7 +49,7 @@ class Capability(BaseModel):
     __tablename__: str = "capabilities"
 
     agent_id: Column[UUID] = Column(
-        UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False
+        PostgresUUID, ForeignKey("agents.id"), nullable=False
     )
     capability_id: Column[str] = Column(String, nullable=False)
     input_schema: Column[Dict[str, Any]] = Column(JSONB, nullable=False)
@@ -73,7 +73,7 @@ class AgentRequirement(BaseModel):
     __tablename__: str = "agent_requirements"
 
     agent_id: Column[UUID] = Column(
-        UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False
+        PostgresUUID, ForeignKey("agents.id"), nullable=False
     )
     required_capability: Column[str] = Column(String, nullable=False)
 

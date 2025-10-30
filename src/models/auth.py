@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import relationship
 
 from .base import BaseModel
@@ -26,7 +26,7 @@ class User(BaseModel):
     # Relationships
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
     agents = relationship("Agent", back_populates="user", cascade="all, delete-orphan")
-    invocation_logs = relationship("InvocationLog", foreign_keys="InvocationLog.caller_user_id")
+    invocation_logs = relationship("InvocationLog", foreign_keys="InvocationLog.caller_user_id", overlaps="caller_user")
 
 
 class ApiKey(BaseModel):
@@ -35,7 +35,7 @@ class ApiKey(BaseModel):
     __tablename__: str = "api_keys"
 
     user_id: Column[UUID] = Column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+        PostgresUUID, ForeignKey("users.id"), nullable=False
     )
     key_hash: Column[str] = Column(String, nullable=False)
     name: Column[str] = Column(String, nullable=False)

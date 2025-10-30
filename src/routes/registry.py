@@ -41,7 +41,7 @@ async def register_agent(
                 "id": cap.capability_id,
                 "input_schema": cap.input_schema,
                 "output_schema": cap.output_schema,
-                "auth_type": cap.auth_type,
+                "auth_type": {"type": cap.auth_type},
             })
         
         # Convert requirements to response format
@@ -105,6 +105,15 @@ async def list_agents(
             trust_verification=agent.trust_verification,
             is_active=agent.is_active,
             created_at=agent.created_at,
+            capabilities=[
+                {
+                    "id": cap.capability_id,
+                    "input_schema": cap.input_schema,
+                    "output_schema": cap.output_schema,
+                    "auth_type": {"type": cap.auth_type},
+                }
+                for cap in agent.capabilities
+            ],
         )
         for agent in agents
     ]
@@ -178,7 +187,7 @@ async def update_agent(
                 "id": cap.capability_id,
                 "input_schema": cap.input_schema,
                 "output_schema": cap.output_schema,
-                "auth_type": cap.auth_type,
+                "auth_type": {"type": cap.auth_type},
             })
         
         # Convert requirements to response format

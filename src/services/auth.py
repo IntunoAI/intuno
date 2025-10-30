@@ -61,10 +61,13 @@ class AuthService:
         if existing_user:
             raise ValueError("User with this email already exists")
 
+        # Truncate password to 72 bytes for bcrypt compatibility
+        password = user_data.password[:72]
+
         # Create new user
         user = User(
             email=user_data.email,
-            password_hash=self.hash_password(user_data.password),
+            password_hash=self.hash_password(password),
             first_name=user_data.first_name,
             last_name=user_data.last_name,
         )

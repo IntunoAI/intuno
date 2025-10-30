@@ -30,7 +30,7 @@ async def get_current_user_from_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    user = await auth_service.user_repo.get_by_id(user_id)
+    user = await auth_service.repository.get_user_by_id(user_id)
     if user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -75,7 +75,7 @@ async def get_current_user_optional(
     if credentials:
         user_id = auth_service.verify_token(credentials.credentials)
         if user_id:
-            user = await auth_service.user_repo.get_by_id(user_id)
+            user = await auth_service.repository.get_user_by_id(user_id)
             if user and user.is_active:
                 return user
     
@@ -100,7 +100,7 @@ async def get_current_user(
     if credentials:
         user_id = auth_service.verify_token(credentials.credentials)
         if user_id:
-            user = await auth_service.user_repo.get_by_id(user_id)
+            user = await auth_service.repository.get_user_by_id(user_id)
             if user and user.is_active:
                 return user
     

@@ -59,7 +59,7 @@ class RegistryRepository:
         offset: int = 0,
     ) -> List[Agent]:
         """Search agents with filters."""
-        query = select(Agent).where(Agent.is_active == True)
+        query = select(Agent).options(selectinload(Agent.capabilities)).where(Agent.is_active)
         
         if tags:
             query = query.where(Agent.tags.overlap(tags))

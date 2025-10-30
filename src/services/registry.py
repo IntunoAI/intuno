@@ -60,7 +60,7 @@ class RegistryService:
                 capability_id=cap_data.id,
                 input_schema=cap_data.input_schema,
                 output_schema=cap_data.output_schema,
-                auth_type=cap_data.auth.get("type", "public"),
+                auth_type=cap_data.auth_type.get("type", "public"),
                 embedding=cap_embedding,
             )
             capabilities.append(capability)
@@ -168,7 +168,7 @@ class RegistryService:
                 capability_id=cap_data.id,
                 input_schema=cap_data.input_schema,
                 output_schema=cap_data.output_schema,
-                auth_type=cap_data.auth.get("type", "public"),
+                auth_type=cap_data.auth_type.get("type", "public"),
                 embedding=cap_embedding,
             )
             self.session.add(capability)
