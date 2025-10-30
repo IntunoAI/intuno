@@ -7,7 +7,7 @@ from src.routes.health import router as health_router
 app = FastAPI(
     title="Alquify Agents Infrastructure",
     description="Infrastructure for Alquify Agents",
-    version=settings.API_VERSION
+    version=settings.API_VERSION,
 )
 
 # Configure CORS

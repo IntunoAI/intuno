@@ -10,11 +10,6 @@ async def health_check():
     Gets health status of the application
     :return:
     """
-    health_status = {
-        "status": "healthy"
-    }
+    health_status = {"status": "healthy"}
 
-    return JSONResponse(
-        content=health_status,
-        status_code=200
-    )
+    return JSONResponse(content=health_status, status_code=200)
