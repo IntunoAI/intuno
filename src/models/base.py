@@ -1,7 +1,6 @@
 """Base model for all other models to inherit from."""
 
 import uuid
-from zipfile import BadZipfile
 
 from sqlalchemy import Column, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
