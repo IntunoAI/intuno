@@ -1,0 +1,46 @@
+"""Auth domain models."""
+
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+
+from .base import BaseModel
+
+
+class User(BaseModel):
+    """Represents a user in the system."""
+
+    __tablename__: str = "users"
+
+    email: Column[str] = Column(String, nullable=False, unique=True, index=True)
+    password_hash: Column[str] = Column(String, nullable=False)
+    first_name: Column[str] = Column(String, nullable=True)
+    last_name: Column[str] = Column(String, nullable=True)
+    phone_number: Column[str] = Column(String, nullable=True, unique=True)
+    is_active: Column[bool] = Column(Boolean, default=True, nullable=False)
+
+    # Relationships
+    api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
+    agents = relationship("Agent", back_populates="user", cascade="all, delete-orphan")
+    invocation_logs = relationship("InvocationLog", foreign_keys="InvocationLog.caller_user_id")
+
+
+class ApiKey(BaseModel):
+    """Represents an API key for a user."""
+
+    __tablename__: str = "api_keys"
+
+    user_id: Column[UUID] = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    key_hash: Column[str] = Column(String, nullable=False)
+    name: Column[str] = Column(String, nullable=False)
+    last_used_at: Column[Optional[datetime]] = Column(DateTime(timezone=True), nullable=True)
+    expires_at: Column[Optional[datetime]] = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    user = relationship("User", back_populates="api_keys")
