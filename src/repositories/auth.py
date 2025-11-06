@@ -8,12 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.auth import ApiKey, User
+from src.database import get_db
+from fastapi import Depends
 
 
 class AuthRepository:
     """Repository for auth domain operations."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession = Depends(get_db)):
         self.session = session
 
     # User operations

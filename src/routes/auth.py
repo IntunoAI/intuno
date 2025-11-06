@@ -26,15 +26,13 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserRegister,
-    db: AsyncSession = Depends(get_db),
+    auth_service: AuthService = Depends(),
 ):
     """Register a new user.
     :param user_data: UserRegister
     :param db: AsyncSession
     :return: UserResponse
     """
-    auth_service = AuthService(db)
-    
     try:
         user = await auth_service.register_user(user_data)
         return UserResponse(
@@ -84,16 +82,14 @@ async def login(
 async def create_api_key(
     api_key_data: ApiKeyCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+    auth_service: AuthService = Depends(),
+) -> ApiKeyResponse:
     """Create a new API key.
     :param api_key_data: ApiKeyCreate
     :param current_user: User
     :param db: AsyncSession
     :return: ApiKeyResponse
     """
-    auth_service = AuthService(db)
-    
     api_key_record, api_key = await auth_service.create_api_key(current_user.id, api_key_data)
     
     return ApiKeyResponse(
@@ -109,15 +105,13 @@ async def create_api_key(
 @router.get("/api-keys", response_model=List[ApiKeyListResponse])
 async def list_api_keys(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+    auth_service: AuthService = Depends(),
+) -> List[ApiKeyListResponse]:
     """List user's API keys.
     :param current_user: User
-    :param db: AsyncSession
+    :param auth_service: AuthService
     :return: List[ApiKeyListResponse]
     """
-    auth_service = AuthService(db)
-    
     api_keys = await auth_service.get_user_api_keys(current_user.id)
     
     return [
@@ -136,15 +130,14 @@ async def list_api_keys(
 async def delete_api_key(
     key_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+    auth_service: AuthService = Depends(),
+) -> None:
     """Delete an API key.
     :param key_id: UUID
     :param current_user: User
-    :param db: AsyncSession
+    :param auth_service: AuthService
     :return: None
     """
-    auth_service = AuthService(db)
     
     success = await auth_service.delete_api_key(current_user.id, key_id)
     if not success:

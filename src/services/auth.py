@@ -7,7 +7,6 @@ from uuid import UUID
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.settings import settings
 from src.models.auth import ApiKey, User
@@ -21,9 +20,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 class AuthService:
     """Service for authentication operations."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        self.repository = AuthRepository(session)
+    def __init__(self, auth_repository: AuthRepository):
+        self.auth_repository = auth_repository
 
     def hash_password(self, password: str) -> str:
         """Hash a password.
@@ -73,7 +71,7 @@ class AuthService:
         :return: User
         """
         # Check if user already exists
-        existing_user = await self.repository.get_user_by_email(user_data.email)
+        existing_user = await self.auth_repository.get_user_by_email(user_data.email)
         if existing_user:
             raise ValueError("User with this email already exists")
 
@@ -87,14 +85,14 @@ class AuthService:
             first_name=user_data.first_name,
             last_name=user_data.last_name,
         )
-        return await self.repository.create_user(user)
+        return await self.auth_repository.create_user(user)
 
     async def authenticate_user(self, login_data: UserLogin) -> Optional[User]:
         """Authenticate a user with email and password.
         :param login_data: UserLogin
         :return: Optional[User]
         """
-        user = await self.repository.get_user_by_email(login_data.email)
+        user = await self.auth_repository.get_user_by_email(login_data.email)
         if not user or not self.verify_password(login_data.password, user.password_hash):
             return None
         return user
@@ -117,7 +115,7 @@ class AuthService:
             expires_at=api_key_data.expires_at,
         )
         
-        created_key = await self.repository.create_api_key(api_key_record)
+        created_key = await self.auth_repository.create_api_key(api_key_record)
         return created_key, api_key
 
     async def verify_api_key(self, api_key: str) -> Optional[User]:
@@ -129,7 +127,7 @@ class AuthService:
         key_hash = self.hash_password(api_key)
         
         # Find the API key record
-        api_key_record = await self.repository.get_api_key_by_hash(key_hash)
+        api_key_record = await self.auth_repository.get_api_key_by_hash(key_hash)
         if not api_key_record:
             return None
         
@@ -138,17 +136,17 @@ class AuthService:
             return None
         
         # Update last used timestamp
-        await self.repository.update_api_key_last_used(api_key_record.id)
+        await self.auth_repository.update_api_key_last_used(api_key_record.id)
         
         # Get the user
-        return await self.repository.get_user_by_id(api_key_record.user_id)
+        return await self.auth_repository.get_user_by_id(api_key_record.user_id)
 
     async def get_user_api_keys(self, user_id: UUID) -> list[ApiKey]:
         """Get all API keys for a user.
         :param user_id: UUID
         :return: list[ApiKey]
         """
-        return await self.repository.get_api_keys_by_user_id(user_id)
+        return await self.auth_repository.get_api_keys_by_user_id(user_id)
 
     async def delete_api_key(self, user_id: UUID, key_id: UUID) -> bool:
         """Delete an API key (only if owned by user).
@@ -156,7 +154,14 @@ class AuthService:
         :param key_id: UUID
         :return: bool
         """
-        api_key = await self.repository.get_api_key_by_id(key_id)
+        api_key = await self.auth_repository.get_api_key_by_id(key_id)
         if not api_key or api_key.user_id != user_id:
             return False
-        return await self.repository.delete_api_key(key_id)
+        return await self.auth_repository.delete_api_key(key_id)
+
+    async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
+        """Get a user by ID.
+        :param user_id: UUID
+        :return: Optional[User]
+        """
+        return await self.auth_repository.get_user_by_id(user_id)
