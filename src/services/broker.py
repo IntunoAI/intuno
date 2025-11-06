@@ -14,9 +14,9 @@ from src.schemas.broker import InvokeRequest, InvokeResponse
 class BrokerService:
     """Service for brokering agent invocations."""
 
-    def __init__(self, broker_repo: BrokerRepository, registry_repo: RegistryRepository):
-        self.broker_repo = broker_repo
-        self.registry_repo = registry_repo
+    def __init__(self, broker_repository: BrokerRepository, registry_repository: RegistryRepository):
+        self.broker_repository = broker_repository
+        self.registry_repository = registry_repository
 
     async def invoke_agent(
         self,
@@ -32,7 +32,7 @@ class BrokerService:
         start_time = time.time()
         
         # Get the agent
-        agent = await self.registry_repo.get_agent_by_agent_id(invoke_request.agent_id)
+        agent = await self.registry_repository.get_agent_by_agent_id(invoke_request.agent_id)
         if not agent or not agent.is_active:
             return InvokeResponse(
                 success=False,
@@ -119,7 +119,7 @@ class BrokerService:
             latency_ms=latency_ms,
             error_message=error,
         )
-        await self.broker_repo.create_invocation_log(invocation_log)
+        await self.broker_repository.create_invocation_log(invocation_log)
 
         return InvokeResponse(
             success=success,
@@ -140,7 +140,7 @@ class BrokerService:
         :param limit: int
         :return: List[InvocationLog]
         """
-        return await self.broker_repo.get_invocation_logs_by_user_id(user_id, limit)
+        return await self.broker_repository.get_invocation_logs_by_user_id(user_id, limit)
 
     async def get_agent_invocation_logs(
         self,
@@ -153,4 +153,4 @@ class BrokerService:
         :param limit: int
         :return: List[InvocationLog]
         """
-        return await self.broker_repo.get_invocation_logs_by_agent_id(agent_id, limit)
+        return await self.broker_repository.get_invocation_logs_by_agent_id(agent_id, limit)

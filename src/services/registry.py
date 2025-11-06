@@ -12,8 +12,8 @@ from src.utilities.embedding import EmbeddingService
 class RegistryService:
     """Service for agent registry operations."""
 
-    def __init__(self, repository: RegistryRepository, embedding_service: EmbeddingService):
-        self.repository = repository
+    def __init__(self, registry_repository: RegistryRepository, embedding_service: EmbeddingService):
+        self.registry_repository = registry_repository
         self.embedding_service = embedding_service
 
     async def register_agent(self, manifest: AgentManifest, user_id: UUID) -> Agent:
@@ -24,7 +24,7 @@ class RegistryService:
         :return: Agent
         """
         # Check if agent_id already exists
-        existing_agent = await self.repository.get_agent_by_agent_id(manifest.agent_id)
+        existing_agent = await self.registry_repository.get_agent_by_agent_id(manifest.agent_id)
         if existing_agent:
             raise ValueError(f"Agent with ID {manifest.agent_id} already exists")
 
@@ -78,7 +78,7 @@ class RegistryService:
                 requirements.append(requirement)
 
         # Save agent first
-        created_agent = await self.repository.create_agent(agent)
+        created_agent = await self.registry_repository.create_agent(agent)
 
         # Set agent_id for capabilities and requirements
         for capability in capabilities:
@@ -88,12 +88,12 @@ class RegistryService:
 
         # Add capabilities and requirements via repository
         if capabilities:
-            await self.repository.add_capabilities(capabilities)
+            await self.registry_repository.add_capabilities(capabilities)
         if requirements:
-            await self.repository.add_requirements(requirements)
+            await self.registry_repository.add_requirements(requirements)
 
         # Return agent with relationships loaded
-        return await self.repository.get_agent_by_id(created_agent.id)
+        return await self.registry_repository.get_agent_by_id(created_agent.id)
 
     async def search_agents(self, query: AgentSearchQuery) -> List[Agent]:
         """
@@ -101,7 +101,7 @@ class RegistryService:
         :param query: AgentSearchQuery
         :return: List[Agent]
         """
-        return await self.repository.search_agents(
+        return await self.registry_repository.search_agents(
             tags=query.tags,
             capability=query.capability,
             search_text=query.search,
@@ -119,7 +119,7 @@ class RegistryService:
         query_embedding = await self.embedding_service.generate_embedding(query.query)
         
         # Perform semantic search
-        return await self.repository.semantic_search(
+        return await self.registry_repository.semantic_search(
             embedding=query_embedding,
             limit=query.limit,
         )
@@ -130,7 +130,7 @@ class RegistryService:
         :param agent_id: str
         :return: Optional[Agent]
         """
-        return await self.repository.get_agent_by_agent_id(agent_id)
+        return await self.registry_repository.get_agent_by_agent_id(agent_id)
 
     async def get_agent_by_uuid(self, agent_uuid: UUID) -> Optional[Agent]:
         """
@@ -138,7 +138,7 @@ class RegistryService:
         :param agent_uuid: UUID
         :return: Optional[Agent]
         """
-        return await self.repository.get_agent_by_id(agent_uuid)
+        return await self.registry_repository.get_agent_by_id(agent_uuid)
 
     async def update_agent(self, agent_uuid: UUID, manifest: AgentManifest, user_id: UUID) -> Agent:
         """
@@ -148,7 +148,7 @@ class RegistryService:
         :param user_id: UUID
         :return: Agent
         """
-        agent = await self.repository.get_agent_by_id(agent_uuid)
+        agent = await self.registry_repository.get_agent_by_id(agent_uuid)
         if not agent:
             raise ValueError("Agent not found")
         
@@ -172,8 +172,8 @@ class RegistryService:
 
         # Update capabilities (delete old ones and create new ones)
         # This is a simplified approach - in production you might want more sophisticated updates
-        await self.repository.delete_agent_capabilities(agent.id)
-        await self.repository.delete_agent_requirements(agent.id)
+        await self.registry_repository.delete_agent_capabilities(agent.id)
+        await self.registry_repository.delete_agent_requirements(agent.id)
 
         # Create new capabilities
         new_capabilities = []
@@ -205,11 +205,11 @@ class RegistryService:
 
         # Add new capabilities and requirements via repository
         if new_capabilities:
-            await self.repository.add_capabilities(new_capabilities)
+            await self.registry_repository.add_capabilities(new_capabilities)
         if new_requirements:
-            await self.repository.add_requirements(new_requirements)
+            await self.registry_repository.add_requirements(new_requirements)
 
-        return await self.repository.update_agent(agent)
+        return await self.registry_repository.update_agent(agent)
 
     async def delete_agent(self, agent_uuid: UUID, user_id: UUID) -> bool:
         """
@@ -218,14 +218,14 @@ class RegistryService:
         :param user_id: UUID
         :return: bool
         """
-        agent = await self.repository.get_agent_by_id(agent_uuid)
+        agent = await self.registry_repository.get_agent_by_id(agent_uuid)
         if not agent:
             return False
         
         if agent.user_id != user_id:
             raise ValueError("Not authorized to delete this agent")
 
-        return await self.repository.delete_agent(agent_uuid)
+        return await self.registry_repository.delete_agent(agent_uuid)
 
     async def get_user_agents(self, user_id: UUID) -> List[Agent]:
         """
@@ -233,4 +233,4 @@ class RegistryService:
         :param user_id: UUID
         :return: List[Agent]
         """
-        return await self.repository.get_agents_by_user_id(user_id)
+        return await self.registry_repository.get_agents_by_user_id(user_id)
