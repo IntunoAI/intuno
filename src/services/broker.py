@@ -1,11 +1,9 @@
 """Broker domain service."""
 
 import time
-from typing import Dict, Any, Optional
 from uuid import UUID
 
 import httpx
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.broker import InvocationLog
 from src.repositories.broker import BrokerRepository
@@ -16,17 +14,21 @@ from src.schemas.broker import InvokeRequest, InvokeResponse
 class BrokerService:
     """Service for brokering agent invocations."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        self.broker_repo = BrokerRepository(session)
-        self.registry_repo = RegistryRepository(session)
+    def __init__(self, broker_repo: BrokerRepository, registry_repo: RegistryRepository):
+        self.broker_repo = broker_repo
+        self.registry_repo = registry_repo
 
     async def invoke_agent(
         self,
         invoke_request: InvokeRequest,
         caller_user_id: UUID,
     ) -> InvokeResponse:
-        """Invoke an agent capability through the broker."""
+        """
+        Invoke an agent capability through the broker.
+        :param invoke_request: InvokeRequest
+        :param caller_user_id: UUID
+        :return: InvokeResponse
+        """
         start_time = time.time()
         
         # Get the agent
@@ -132,7 +134,12 @@ class BrokerService:
         user_id: UUID,
         limit: int = 50,
     ) -> list[InvocationLog]:
-        """Get invocation logs for a user."""
+        """
+        Get invocation logs for a user.
+        :param user_id: UUID
+        :param limit: int
+        :return: List[InvocationLog]
+        """
         return await self.broker_repo.get_invocation_logs_by_user_id(user_id, limit)
 
     async def get_agent_invocation_logs(
@@ -140,5 +147,10 @@ class BrokerService:
         agent_id: UUID,
         limit: int = 50,
     ) -> list[InvocationLog]:
-        """Get invocation logs for an agent."""
+        """
+        Get invocation logs for an agent.
+        :param agent_id: UUID
+        :param limit: int
+        :return: List[InvocationLog]
+        """
         return await self.broker_repo.get_invocation_logs_by_agent_id(agent_id, limit)

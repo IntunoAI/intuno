@@ -4,10 +4,8 @@ from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import get_current_user
-from src.database import get_db
 from src.models.auth import User
 from src.schemas.broker import InvocationLogResponse, InvokeRequest, InvokeResponse
 from src.services.broker import BrokerService
@@ -19,10 +17,14 @@ router = APIRouter(prefix="/broker", tags=["Broker"])
 async def invoke_agent(
     invoke_request: InvokeRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    broker_service: BrokerService = Depends(),
 ):
-    """Invoke an agent capability through the broker."""
-    broker_service = BrokerService(db)
+    """Invoke an agent capability through the broker.
+    :param invoke_request: InvokeRequest
+    :param current_user: User
+    :param broker_service: BrokerService
+    :return: InvokeResponse
+    """
     
     try:
         response = await broker_service.invoke_agent(invoke_request, current_user.id)
@@ -38,10 +40,14 @@ async def invoke_agent(
 async def get_invocation_logs(
     current_user: User = Depends(get_current_user),
     limit: int = Query(default=50, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    broker_service: BrokerService = Depends(),
 ):
-    """Get invocation logs for the current user."""
-    broker_service = BrokerService(db)
+    """Get invocation logs for the current user.
+    :param current_user: User
+    :param limit: int
+    :param broker_service: BrokerService
+    :return: List[InvocationLogResponse]
+    """
     
     logs = await broker_service.get_invocation_logs(current_user.id, limit)
     
@@ -65,10 +71,15 @@ async def get_agent_invocation_logs(
     agent_id: UUID,
     current_user: User = Depends(get_current_user),
     limit: int = Query(default=50, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    broker_service: BrokerService = Depends(),
 ):
-    """Get invocation logs for a specific agent."""
-    broker_service = BrokerService(db)
+    """Get invocation logs for a specific agent.
+    :param agent_id: UUID
+    :param current_user: User
+    :param limit: int
+    :param broker_service: BrokerService
+    :return: List[InvocationLogResponse]
+    """
     
     logs = await broker_service.get_agent_invocation_logs(agent_id, limit)
     

@@ -15,7 +15,10 @@ class EmbeddingService:
 
     @staticmethod
     async def generate_embedding(text: str) -> List[float]:
-        """Generate embedding for text using OpenAI's text-embedding-3-small model."""
+        """Generate embedding for text using OpenAI's text-embedding-3-small model.
+        :param text: str
+        :return: List[float]
+        """
         try:
             response = await client.embeddings.create(
                 model="text-embedding-3-small",
@@ -27,7 +30,10 @@ class EmbeddingService:
 
     @staticmethod
     async def generate_embeddings_batch(texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for multiple texts in batch."""
+        """Generate embeddings for multiple texts in batch.
+        :param texts: List[str]
+        :return: List[List[float]]
+        """
         try:
             response = await client.embeddings.create(
                 model="text-embedding-3-small",
@@ -39,13 +45,23 @@ class EmbeddingService:
 
     @staticmethod
     def prepare_agent_text_for_embedding(agent_name: str, description: str, tags: List[str]) -> str:
-        """Prepare agent text for embedding generation."""
+        """Prepare agent text for embedding generation.
+        :param agent_name: str
+        :param description: str
+        :param tags: List[str]
+        :return: str
+        """
         tags_text = ", ".join(tags) if tags else ""
         return f"{agent_name}. {description}. Tags: {tags_text}".strip()
 
     @staticmethod
     def prepare_capability_text_for_embedding(capability_id: str, input_schema: dict, output_schema: dict) -> str:
-        """Prepare capability text for embedding generation."""
+        """Prepare capability text for embedding generation.
+        :param capability_id: str
+        :param input_schema: dict
+        :param output_schema: dict
+        :return: str
+        """
         input_desc = input_schema.get("description", "")
         output_desc = output_schema.get("description", "")
         return f"Capability {capability_id}. Input: {input_desc}. Output: {output_desc}".strip()

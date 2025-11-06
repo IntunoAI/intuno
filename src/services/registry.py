@@ -3,8 +3,6 @@
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.models.registry import Agent, Capability, AgentRequirement
 from src.repositories.registry import RegistryRepository
 from src.schemas.registry import AgentManifest, AgentSearchQuery, DiscoverQuery
@@ -14,13 +12,17 @@ from src.utilities.embedding import EmbeddingService
 class RegistryService:
     """Service for agent registry operations."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-        self.repository = RegistryRepository(session)
-        self.embedding_service = EmbeddingService()
+    def __init__(self, repository: RegistryRepository, embedding_service: EmbeddingService):
+        self.repository = repository
+        self.embedding_service = embedding_service
 
     async def register_agent(self, manifest: AgentManifest, user_id: UUID) -> Agent:
-        """Register a new agent."""
+        """
+        Register a new agent.
+        :param manifest: AgentManifest
+        :param user_id: UUID
+        :return: Agent
+        """
         # Check if agent_id already exists
         existing_agent = await self.repository.get_agent_by_agent_id(manifest.agent_id)
         if existing_agent:
@@ -84,19 +86,21 @@ class RegistryService:
         for requirement in requirements:
             requirement.agent_id = created_agent.id
 
-        # Add capabilities and requirements to session
-        for capability in capabilities:
-            self.session.add(capability)
-        for requirement in requirements:
-            self.session.add(requirement)
-
-        await self.session.commit()
+        # Add capabilities and requirements via repository
+        if capabilities:
+            await self.repository.add_capabilities(capabilities)
+        if requirements:
+            await self.repository.add_requirements(requirements)
 
         # Return agent with relationships loaded
         return await self.repository.get_agent_by_id(created_agent.id)
 
     async def search_agents(self, query: AgentSearchQuery) -> List[Agent]:
-        """Search agents with filters."""
+        """
+        Search agents with filters.
+        :param query: AgentSearchQuery
+        :return: List[Agent]
+        """
         return await self.repository.search_agents(
             tags=query.tags,
             capability=query.capability,
@@ -106,7 +110,11 @@ class RegistryService:
         )
 
     async def semantic_discover(self, query: DiscoverQuery) -> List[Agent]:
-        """Semantic discovery using vector similarity."""
+        """
+        Semantic discovery using vector similarity.
+        :param query: DiscoverQuery
+        :return: List[Agent]
+        """
         # Generate embedding for the query
         query_embedding = await self.embedding_service.generate_embedding(query.query)
         
@@ -117,15 +125,29 @@ class RegistryService:
         )
 
     async def get_agent(self, agent_id: str) -> Optional[Agent]:
-        """Get agent by agent_id."""
+        """
+        Get agent by agent_id.
+        :param agent_id: str
+        :return: Optional[Agent]
+        """
         return await self.repository.get_agent_by_agent_id(agent_id)
 
     async def get_agent_by_uuid(self, agent_uuid: UUID) -> Optional[Agent]:
-        """Get agent by UUID."""
+        """
+        Get agent by UUID.
+        :param agent_uuid: UUID
+        :return: Optional[Agent]
+        """
         return await self.repository.get_agent_by_id(agent_uuid)
 
     async def update_agent(self, agent_uuid: UUID, manifest: AgentManifest, user_id: UUID) -> Agent:
-        """Update an agent (only if owned by user)."""
+        """
+        Update an agent (only if owned by user).
+        :param agent_uuid: UUID
+        :param manifest: AgentManifest
+        :param user_id: UUID
+        :return: Agent
+        """
         agent = await self.repository.get_agent_by_id(agent_uuid)
         if not agent:
             raise ValueError("Agent not found")
@@ -150,13 +172,11 @@ class RegistryService:
 
         # Update capabilities (delete old ones and create new ones)
         # This is a simplified approach - in production you might want more sophisticated updates
-        for capability in agent.capabilities:
-            await self.session.delete(capability)
-        
-        for requirement in agent.requirements:
-            await self.session.delete(requirement)
+        await self.repository.delete_agent_capabilities(agent.id)
+        await self.repository.delete_agent_requirements(agent.id)
 
         # Create new capabilities
+        new_capabilities = []
         for cap_data in manifest.capabilities:
             cap_text = self.embedding_service.prepare_capability_text_for_embedding(
                 cap_data.id, cap_data.input_schema, cap_data.output_schema
@@ -171,21 +191,33 @@ class RegistryService:
                 auth_type=cap_data.auth_type.get("type", "public"),
                 embedding=cap_embedding,
             )
-            self.session.add(capability)
+            new_capabilities.append(capability)
 
         # Create new requirements
+        new_requirements = []
         if manifest.requires:
             for req_data in manifest.requires:
                 requirement = AgentRequirement(
                     agent_id=agent.id,
                     required_capability=req_data["capability"],
                 )
-                self.session.add(requirement)
+                new_requirements.append(requirement)
+
+        # Add new capabilities and requirements via repository
+        if new_capabilities:
+            await self.repository.add_capabilities(new_capabilities)
+        if new_requirements:
+            await self.repository.add_requirements(new_requirements)
 
         return await self.repository.update_agent(agent)
 
     async def delete_agent(self, agent_uuid: UUID, user_id: UUID) -> bool:
-        """Delete an agent (only if owned by user)."""
+        """
+        Delete an agent (only if owned by user).
+        :param agent_uuid: UUID
+        :param user_id: UUID
+        :return: bool
+        """
         agent = await self.repository.get_agent_by_id(agent_uuid)
         if not agent:
             return False
@@ -196,5 +228,9 @@ class RegistryService:
         return await self.repository.delete_agent(agent_uuid)
 
     async def get_user_agents(self, user_id: UUID) -> List[Agent]:
-        """Get all agents for a user."""
+        """
+        Get all agents for a user.
+        :param user_id: UUID
+        :return: List[Agent]
+        """
         return await self.repository.get_agents_by_user_id(user_id)

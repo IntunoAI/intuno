@@ -26,15 +26,25 @@ class AuthService:
         self.repository = AuthRepository(session)
 
     def hash_password(self, password: str) -> str:
-        """Hash a password."""
+        """Hash a password.
+        :param password: str
+        :return: str
+        """
         return pwd_context.hash(password)
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash."""
+        """Verify a password against its hash.
+        :param plain_password: str
+        :param hashed_password: str
+        :return: bool
+        """
         return pwd_context.verify(plain_password, hashed_password)
 
     def create_access_token(self, user_id: UUID) -> str:
-        """Create a JWT access token."""
+        """Create a JWT access token.
+        :param user_id: UUID
+        :return: str
+        """
         expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
         to_encode = {
             "sub": str(user_id),
@@ -44,7 +54,10 @@ class AuthService:
         return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
     def verify_token(self, token: str) -> Optional[UUID]:
-        """Verify a JWT token and return user ID."""
+        """Verify a JWT token and return user ID.
+        :param token: str
+        :return: Optional[UUID]
+        """
         try:
             payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
             user_id: str = payload.get("sub")
@@ -55,7 +68,10 @@ class AuthService:
             return None
 
     async def register_user(self, user_data: UserRegister) -> User:
-        """Register a new user."""
+        """Register a new user.
+        :param user_data: UserRegister
+        :return: User
+        """
         # Check if user already exists
         existing_user = await self.repository.get_user_by_email(user_data.email)
         if existing_user:
@@ -74,14 +90,21 @@ class AuthService:
         return await self.repository.create_user(user)
 
     async def authenticate_user(self, login_data: UserLogin) -> Optional[User]:
-        """Authenticate a user with email and password."""
+        """Authenticate a user with email and password.
+        :param login_data: UserLogin
+        :return: Optional[User]
+        """
         user = await self.repository.get_user_by_email(login_data.email)
         if not user or not self.verify_password(login_data.password, user.password_hash):
             return None
         return user
 
     async def create_api_key(self, user_id: UUID, api_key_data: ApiKeyCreate) -> tuple[ApiKey, str]:
-        """Create a new API key for a user."""
+        """Create a new API key for a user.
+        :param user_id: UUID
+        :param api_key_data: ApiKeyCreate
+        :return: tuple[ApiKey, str]
+        """
         # Generate a random API key
         api_key = secrets.token_urlsafe(settings.API_KEY_LENGTH)
         key_hash = self.hash_password(api_key)
@@ -98,7 +121,10 @@ class AuthService:
         return created_key, api_key
 
     async def verify_api_key(self, api_key: str) -> Optional[User]:
-        """Verify an API key and return the associated user."""
+        """Verify an API key and return the associated user.
+        :param api_key: str
+        :return: Optional[User]
+        """
         # Hash the provided key to compare with stored hash
         key_hash = self.hash_password(api_key)
         
@@ -118,11 +144,18 @@ class AuthService:
         return await self.repository.get_user_by_id(api_key_record.user_id)
 
     async def get_user_api_keys(self, user_id: UUID) -> list[ApiKey]:
-        """Get all API keys for a user."""
+        """Get all API keys for a user.
+        :param user_id: UUID
+        :return: list[ApiKey]
+        """
         return await self.repository.get_api_keys_by_user_id(user_id)
 
     async def delete_api_key(self, user_id: UUID, key_id: UUID) -> bool:
-        """Delete an API key (only if owned by user)."""
+        """Delete an API key (only if owned by user).
+        :param user_id: UUID
+        :param key_id: UUID
+        :return: bool
+        """
         api_key = await self.repository.get_api_key_by_id(key_id)
         if not api_key or api_key.user_id != user_id:
             return False

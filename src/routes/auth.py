@@ -28,7 +28,11 @@ async def register(
     user_data: UserRegister,
     db: AsyncSession = Depends(get_db),
 ):
-    """Register a new user."""
+    """Register a new user.
+    :param user_data: UserRegister
+    :param db: AsyncSession
+    :return: UserResponse
+    """
     auth_service = AuthService(db)
     
     try:
@@ -54,7 +58,11 @@ async def login(
     login_data: UserLogin,
     db: AsyncSession = Depends(get_db),
 ):
-    """Login and get access token."""
+    """Login and get access token.
+    :param login_data: UserLogin
+    :param db: AsyncSession
+    :return: TokenResponse
+    """
     auth_service = AuthService(db)
     
     user = await auth_service.authenticate_user(login_data)
@@ -78,7 +86,12 @@ async def create_api_key(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new API key."""
+    """Create a new API key.
+    :param api_key_data: ApiKeyCreate
+    :param current_user: User
+    :param db: AsyncSession
+    :return: ApiKeyResponse
+    """
     auth_service = AuthService(db)
     
     api_key_record, api_key = await auth_service.create_api_key(current_user.id, api_key_data)
@@ -98,7 +111,11 @@ async def list_api_keys(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List user's API keys."""
+    """List user's API keys.
+    :param current_user: User
+    :param db: AsyncSession
+    :return: List[ApiKeyListResponse]
+    """
     auth_service = AuthService(db)
     
     api_keys = await auth_service.get_user_api_keys(current_user.id)
@@ -121,7 +138,12 @@ async def delete_api_key(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete an API key."""
+    """Delete an API key.
+    :param key_id: UUID
+    :param current_user: User
+    :param db: AsyncSession
+    :return: None
+    """
     auth_service = AuthService(db)
     
     success = await auth_service.delete_api_key(current_user.id, key_id)
@@ -136,7 +158,10 @@ async def delete_api_key(
 async def get_current_user_info(
     current_user: User = Depends(get_current_user),
 ):
-    """Get current user information."""
+    """Get current user information.
+    :param current_user: User
+    :return: UserResponse
+    """
     return UserResponse(
         id=current_user.id,
         email=current_user.email,

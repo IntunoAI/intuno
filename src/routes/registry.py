@@ -26,10 +26,14 @@ router = APIRouter(prefix="/registry", tags=["Registry"])
 async def register_agent(
     agent_data: AgentCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    registry_service: RegistryService = Depends(),
 ):
-    """Register a new agent."""
-    registry_service = RegistryService(db)
+    """Register a new agent.
+    :param agent_data: AgentCreate
+    :param current_user: User
+    :param registry_service: RegistryService
+    :return: AgentResponse
+    """
     
     try:
         agent = await registry_service.register_agent(agent_data.manifest, current_user.id)
@@ -79,10 +83,17 @@ async def list_agents(
     search: str = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    db: AsyncSession = Depends(get_db),
+    registry_service: RegistryService = Depends(),
 ):
-    """List and search agents."""
-    registry_service = RegistryService(db)
+    """List and search agents.
+    :param tags: List[str]
+    :param capability: str
+    :param search: str
+    :param limit: int
+    :param offset: int
+    :param registry_service: RegistryService
+    :return: List[AgentListResponse]
+    """
     
     query = AgentSearchQuery(
         tags=tags,
@@ -122,10 +133,13 @@ async def list_agents(
 @router.get("/agents/{agent_id}", response_model=AgentResponse)
 async def get_agent(
     agent_id: str,
-    db: AsyncSession = Depends(get_db),
+    registry_service: RegistryService = Depends(),
 ):
-    """Get agent details by agent_id."""
-    registry_service = RegistryService(db)
+    """Get agent details by agent_id.
+    :param agent_id: str
+    :param registry_service: RegistryService
+    :return: AgentResponse
+    """
     
     agent = await registry_service.get_agent(agent_id)
     if not agent:
@@ -172,10 +186,15 @@ async def update_agent(
     agent_uuid: UUID,
     agent_data: AgentUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    registry_service: RegistryService = Depends(),
 ):
-    """Update an agent (owner only)."""
-    registry_service = RegistryService(db)
+    """Update an agent (owner only).
+    :param agent_uuid: UUID
+    :param agent_data: AgentUpdate
+    :param current_user: User
+    :param registry_service: RegistryService
+    :return: AgentResponse
+    """
     
     try:
         agent = await registry_service.update_agent(agent_uuid, agent_data.manifest, current_user.id)
@@ -222,10 +241,14 @@ async def update_agent(
 async def delete_agent(
     agent_uuid: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    registry_service: RegistryService = Depends(),
 ):
-    """Delete an agent (owner only)."""
-    registry_service = RegistryService(db)
+    """Delete an agent (owner only).
+    :param agent_uuid: UUID
+    :param current_user: User
+    :param registry_service: RegistryService
+    :return: None
+    """
     
     try:
         success = await registry_service.delete_agent(agent_uuid, current_user.id)
@@ -245,10 +268,14 @@ async def delete_agent(
 async def discover_agents(
     query: str = Query(..., description="Natural language query for semantic search"),
     limit: int = Query(default=10, ge=1, le=50),
-    db: AsyncSession = Depends(get_db),
+    registry_service: RegistryService = Depends(),
 ):
-    """Semantic discovery of agents."""
-    registry_service = RegistryService(db)
+    """Semantic discovery of agents.
+    :param query: str
+    :param limit: int
+    :param registry_service: RegistryService
+    :return: List[AgentListResponse]
+    """
     
     discover_query = DiscoverQuery(query=query, limit=limit)
     agents = await registry_service.semantic_discover(discover_query)
@@ -272,10 +299,13 @@ async def discover_agents(
 @router.get("/my-agents", response_model=List[AgentListResponse])
 async def get_my_agents(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    registry_service: RegistryService = Depends(),
 ):
-    """Get current user's agents."""
-    registry_service = RegistryService(db)
+    """Get current user's agents.
+    :param current_user: User
+    :param registry_service: RegistryService
+    :return: List[AgentListResponse]
+    """
     
     agents = await registry_service.get_user_agents(current_user.id)
     

@@ -8,7 +8,7 @@ router = APIRouter(prefix="/health")
 async def health_check():
     """
     Gets health status of the application
-    :return:
+    :return: JSONResponse
     """
     health_status = {"status": "healthy"}
 

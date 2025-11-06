@@ -18,34 +18,54 @@ class AuthRepository:
 
     # User operations
     async def create_user(self, user: User) -> User:
-        """Create a new user."""
+        """
+        Create a new user.
+        :param user: User
+        :return: User
+        """
         self.session.add(user)
         await self.session.commit()
         await self.session.refresh(user)
         return user
 
     async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
-        """Get user by ID."""
+        """
+        Get user by ID.
+        :param user_id: UUID
+        :return: Optional[User]
+        """
         result = await self.session.execute(
             select(User).where(User.id == user_id)
         )
         return result.scalar_one_or_none()
 
     async def get_user_by_email(self, email: str) -> Optional[User]:
-        """Get user by email."""
+        """
+        Get user by email.
+        :param email: str
+        :return: Optional[User]
+        """
         result = await self.session.execute(
             select(User).where(User.email == email)
         )
         return result.scalar_one_or_none()
 
     async def update_user(self, user: User) -> User:
-        """Update user."""
+        """
+        Update user.
+        :param user: User
+        :return: User
+        """
         await self.session.commit()
         await self.session.refresh(user)
         return user
 
     async def delete_user(self, user_id: UUID) -> bool:
-        """Delete user by ID."""
+        """
+        Delete user by ID.
+        :param user_id: UUID
+        :return: bool
+        """
         result = await self.session.execute(
             select(User).where(User.id == user_id)
         )
@@ -58,35 +78,54 @@ class AuthRepository:
 
     # API Key operations
     async def create_api_key(self, api_key: ApiKey) -> ApiKey:
-        """Create a new API key."""
+        """
+        Create a new API key.
+        :param api_key: ApiKey
+        :return: ApiKey
+        """
         self.session.add(api_key)
         await self.session.commit()
         await self.session.refresh(api_key)
         return api_key
 
     async def get_api_key_by_id(self, key_id: UUID) -> Optional[ApiKey]:
-        """Get API key by ID."""
+        """
+        Get API key by ID.
+        :param key_id: UUID
+        :return: Optional[ApiKey]
+        """
         result = await self.session.execute(
             select(ApiKey).where(ApiKey.id == key_id)
         )
         return result.scalar_one_or_none()
 
     async def get_api_key_by_hash(self, key_hash: str) -> Optional[ApiKey]:
-        """Get API key by hash."""
+        """
+        Get API key by hash.
+        :param key_hash: str
+        :return: Optional[ApiKey]
+        """
         result = await self.session.execute(
             select(ApiKey).where(ApiKey.key_hash == key_hash)
         )
         return result.scalar_one_or_none()
 
     async def get_api_keys_by_user_id(self, user_id: UUID) -> List[ApiKey]:
-        """Get all API keys for a user."""
+        """
+        Get all API keys for a user.
+        :param user_id: UUID
+        :return: List[ApiKey]
+        """
         result = await self.session.execute(
             select(ApiKey).where(ApiKey.user_id == user_id)
         )
         return list(result.scalars().all())
 
     async def update_api_key_last_used(self, key_id: UUID) -> None:
-        """Update last used timestamp."""
+        """Update last used timestamp.
+        :param key_id: UUID
+        :return: None
+        """
         result = await self.session.execute(
             select(ApiKey).where(ApiKey.id == key_id)
         )
@@ -96,7 +135,10 @@ class AuthRepository:
             await self.session.commit()
 
     async def delete_api_key(self, key_id: UUID) -> bool:
-        """Delete API key by ID."""
+        """Delete API key by ID.
+        :param key_id: UUID
+        :return: bool
+        """
         result = await self.session.execute(
             select(ApiKey).where(ApiKey.id == key_id)
         )
