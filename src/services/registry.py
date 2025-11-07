@@ -7,12 +7,17 @@ from src.models.registry import Agent, Capability, AgentRequirement
 from src.repositories.registry import RegistryRepository
 from src.schemas.registry import AgentManifest, AgentSearchQuery, DiscoverQuery
 from src.utilities.embedding import EmbeddingService
+from fastapi import Depends
 
 
 class RegistryService:
     """Service for agent registry operations."""
 
-    def __init__(self, registry_repository: RegistryRepository, embedding_service: EmbeddingService):
+    def __init__(
+        self,
+        registry_repository: RegistryRepository = Depends(),
+        embedding_service: EmbeddingService = Depends(),
+    ):
         self.registry_repository = registry_repository
         self.embedding_service = embedding_service
 

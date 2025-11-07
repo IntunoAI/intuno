@@ -7,6 +7,7 @@ from uuid import UUID
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from fastapi import Depends
 
 from src.core.settings import settings
 from src.models.auth import ApiKey, User
@@ -20,7 +21,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 class AuthService:
     """Service for authentication operations."""
 
-    def __init__(self, auth_repository: AuthRepository):
+    def __init__(self, auth_repository: AuthRepository = Depends()):
         self.auth_repository = auth_repository
 
     def hash_password(self, password: str) -> str:

@@ -9,12 +9,17 @@ from src.models.broker import InvocationLog
 from src.repositories.broker import BrokerRepository
 from src.repositories.registry import RegistryRepository
 from src.schemas.broker import InvokeRequest, InvokeResponse
+from fastapi import Depends
 
 
 class BrokerService:
     """Service for brokering agent invocations."""
 
-    def __init__(self, broker_repository: BrokerRepository, registry_repository: RegistryRepository):
+    def __init__(
+        self,
+        broker_repository: BrokerRepository = Depends(),
+        registry_repository: RegistryRepository = Depends(),
+    ):
         self.broker_repository = broker_repository
         self.registry_repository = registry_repository
 

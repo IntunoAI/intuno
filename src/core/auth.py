@@ -84,8 +84,8 @@ async def get_current_user_optional(
 
 # Convenience dependency that tries both methods
 async def get_current_user(
-    auth_service: AuthService = Depends(),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    auth_service: AuthService = Depends(),
 ) -> User:
     """Get current user from either JWT token or API key."""
     

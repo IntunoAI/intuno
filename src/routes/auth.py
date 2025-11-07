@@ -27,7 +27,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 async def register(
     user_data: UserRegister,
     auth_service: AuthService = Depends(),
-):
+) -> UserResponse:
     """Register a new user.
     :param user_data: UserRegister
     :param db: AsyncSession
@@ -54,15 +54,13 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     login_data: UserLogin,
-    db: AsyncSession = Depends(get_db),
-):
+    auth_service: AuthService = Depends(),
+) -> TokenResponse:
     """Login and get access token.
     :param login_data: UserLogin
-    :param db: AsyncSession
+    :param auth_service: AuthService
     :return: TokenResponse
     """
-    auth_service = AuthService(db)
-    
     user = await auth_service.authenticate_user(login_data)
     if not user:
         raise HTTPException(
