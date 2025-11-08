@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from src.core.auth import get_current_user
 from src.core.security import get_user_from_api_key
 from src.models.auth import User
 from src.schemas.broker import InvocationLogResponse, InvokeRequest, InvokeResponse
@@ -19,7 +20,8 @@ async def invoke_agent(
     current_user: User = Depends(get_user_from_api_key),
     broker_service: BrokerService = Depends(),
 ):
-    """Invoke an agent capability through the broker.
+    """
+    Invoke an agent capability through the broker.
     :param invoke_request: InvokeRequest
     :param current_user: User
     :param broker_service: BrokerService
@@ -42,7 +44,8 @@ async def get_invocation_logs(
     limit: int = Query(default=50, ge=1, le=100),
     broker_service: BrokerService = Depends(),
 ):
-    """Get invocation logs for the current user.
+    """
+    Get invocation logs for the current user.
     :param current_user: User
     :param limit: int
     :param broker_service: BrokerService
@@ -73,7 +76,8 @@ async def get_agent_invocation_logs(
     limit: int = Query(default=50, ge=1, le=100),
     broker_service: BrokerService = Depends(),
 ):
-    """Get invocation logs for a specific agent.
+    """
+    Get invocation logs for a specific agent.
     :param agent_id: UUID
     :param current_user: User
     :param limit: int

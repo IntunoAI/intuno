@@ -28,6 +28,3 @@ app.include_router(health_router, tags=["Health"])
 app.include_router(auth_router, tags=["Authentication"])
 app.include_router(registry_router, tags=["Registry"])
 app.include_router(broker_router, tags=["Broker"])
-
-# Serve static files (frontend)
-app.mount("/static", StaticFiles(directory="src/static"), name="static")
