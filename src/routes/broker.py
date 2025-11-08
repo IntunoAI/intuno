@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from src.core.auth import get_current_user
+from src.core.security import get_user_from_api_key
 from src.models.auth import User
 from src.schemas.broker import InvocationLogResponse, InvokeRequest, InvokeResponse
 from src.services.broker import BrokerService
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/broker", tags=["Broker"])
 @router.post("/invoke", response_model=InvokeResponse)
 async def invoke_agent(
     invoke_request: InvokeRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_user_from_api_key),
     broker_service: BrokerService = Depends(),
 ):
     """Invoke an agent capability through the broker.
@@ -25,7 +25,7 @@ async def invoke_agent(
     :param broker_service: BrokerService
     :return: InvokeResponse
     """
-    
+
     try:
         response = await broker_service.invoke_agent(invoke_request, current_user.id)
         return response
@@ -48,9 +48,9 @@ async def get_invocation_logs(
     :param broker_service: BrokerService
     :return: List[InvocationLogResponse]
     """
-    
+
     logs = await broker_service.get_invocation_logs(current_user.id, limit)
-    
+
     return [
         InvocationLogResponse(
             id=log.id,
@@ -80,9 +80,9 @@ async def get_agent_invocation_logs(
     :param broker_service: BrokerService
     :return: List[InvocationLogResponse]
     """
-    
+
     logs = await broker_service.get_agent_invocation_logs(agent_id, limit)
-    
+
     return [
         InvocationLogResponse(
             id=log.id,
