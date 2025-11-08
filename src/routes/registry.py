@@ -76,6 +76,7 @@ async def register_agent(
 
 @router.get("/agents", response_model=List[AgentListResponse])
 async def list_agents(
+    _: User = Depends(get_current_user),
     tags: List[str] = Query(default=None),
     capability: str = Query(default=None),
     search: str = Query(default=None),
@@ -84,6 +85,7 @@ async def list_agents(
     registry_service: RegistryService = Depends(),
 ):
     """List and search agents.
+    :param _: User
     :param tags: List[str]
     :param capability: str
     :param search: str
@@ -101,7 +103,7 @@ async def list_agents(
         offset=offset,
     )
     
-    agents = await registry_service.search_agents(query)
+    agents = await registry_service.list_agents(query)
     
     return [
         AgentListResponse(
@@ -263,12 +265,13 @@ async def delete_agent(
 
 
 @router.get("/discover", response_model=List[AgentListResponse])
-async def discover_agents(
+async def semantic_discover(
     query: str = Query(..., description="Natural language query for semantic search"),
     limit: int = Query(default=10, ge=1, le=50),
     registry_service: RegistryService = Depends(),
 ):
-    """Semantic discovery of agents.
+    """
+    Semantic discovery of agents using vector similarity.
     :param query: str
     :param limit: int
     :param registry_service: RegistryService
@@ -295,17 +298,18 @@ async def discover_agents(
 
 
 @router.get("/my-agents", response_model=List[AgentListResponse])
-async def get_my_agents(
+async def get_agents_by_user_id(
     current_user: User = Depends(get_current_user),
     registry_service: RegistryService = Depends(),
 ):
-    """Get current user's agents.
+    """
+    Get current user's agents.
     :param current_user: User
     :param registry_service: RegistryService
     :return: List[AgentListResponse]
     """
     
-    agents = await registry_service.get_user_agents(current_user.id)
+    agents = await registry_service.get_agents_by_user_id(current_user.id)
     
     return [
         AgentListResponse(

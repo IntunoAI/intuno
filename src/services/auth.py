@@ -1,21 +1,19 @@
 """Auth domain service."""
 
 import secrets
+import bcrypt
+import hashlib
 from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
 
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends
 
 from src.core.settings import settings
 from src.models.auth import ApiKey, User
 from src.repositories.auth import AuthRepository
 from src.schemas.auth import ApiKeyCreate, UserLogin, UserRegister
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class AuthService:
@@ -25,19 +23,28 @@ class AuthService:
         self.auth_repository = auth_repository
 
     def hash_password(self, password: str) -> str:
-        """Hash a password.
+        """Hash a password using bcrypt.
         :param password: str
         :return: str
         """
-        return pwd_context.hash(password)
+        # Truncate password to 72 bytes for bcrypt compatibility
+        password_bytes = password[:72].encode('utf-8')
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(password_bytes, salt)
+        return hashed.decode('utf-8')
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash.
+        """Verify a password against its hash using bcrypt.
         :param plain_password: str
         :param hashed_password: str
         :return: bool
         """
-        return pwd_context.verify(plain_password, hashed_password)
+        try:
+            password_bytes = plain_password[:72].encode('utf-8')
+            hashed_bytes = hashed_password.encode('utf-8')
+            return bcrypt.checkpw(password_bytes, hashed_bytes)
+        except (ValueError, TypeError):
+            return False
 
     def create_access_token(self, user_id: UUID) -> str:
         """Create a JWT access token.
@@ -98,6 +105,13 @@ class AuthService:
             return None
         return user
 
+    def _hash_api_key(self, api_key: str) -> str:
+        """Hash an API key using SHA256 (deterministic hash for lookup).
+        :param api_key: str
+        :return: str
+        """
+        return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+
     async def create_api_key(self, user_id: UUID, api_key_data: ApiKeyCreate) -> tuple[ApiKey, str]:
         """Create a new API key for a user.
         :param user_id: UUID
@@ -106,7 +120,8 @@ class AuthService:
         """
         # Generate a random API key
         api_key = secrets.token_urlsafe(settings.API_KEY_LENGTH)
-        key_hash = self.hash_password(api_key)
+        # Use SHA256 for API keys (deterministic, allows direct lookup)
+        key_hash = self._hash_api_key(api_key)
         
         # Create API key record
         api_key_record = ApiKey(
@@ -124,8 +139,8 @@ class AuthService:
         :param api_key: str
         :return: Optional[User]
         """
-        # Hash the provided key to compare with stored hash
-        key_hash = self.hash_password(api_key)
+        # Hash the provided key using SHA256 (deterministic)
+        key_hash = self._hash_api_key(api_key)
         
         # Find the API key record
         api_key_record = await self.auth_repository.get_api_key_by_hash(key_hash)

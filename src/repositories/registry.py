@@ -3,7 +3,7 @@
 from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text, bindparam
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -64,7 +64,7 @@ class RegistryRepository:
         )
         return list(result.scalars().all())
 
-    async def search_agents(
+    async def list_agents(
         self,
         tags: Optional[List[str]] = None,
         capability: Optional[str] = None,
@@ -94,15 +94,40 @@ class RegistryRepository:
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def semantic_search(
+    async def semantic_discover(
         self,
         embedding: List[float],
         limit: int = 10,
     ) -> List[Agent]:
-        """Semantic search using vector similarity."""
-        # This would use pgvector's similarity search
-        # For now, return empty list - will implement after pgvector setup
-        return []
+        """
+        Semantic discovery using vector similarity with pgvector.
+        Uses cosine distance (<=>) to find the most similar agents.
+        :param embedding: List[float] - Query embedding vector
+        :param limit: int - Maximum number of results
+        :return: List[Agent] - List of agents ordered by similarity
+        """
+        # Convert embedding list to PostgreSQL array format
+        embedding_str = "{" + ",".join(map(str, embedding)) + "}"
+        
+        # Use cosine distance operator (<=>) for similarity search
+        # Lower distance = higher similarity
+        # We filter for active agents and non-null embeddings
+        # Using text() with bindparam for the pgvector operator
+        embedding_param = bindparam("embedding_vec", embedding_str)
+        query = (
+            select(Agent)
+            .options(selectinload(Agent.capabilities))
+            .where(Agent.is_active)
+            .where(Agent.embedding.isnot(None))
+            .order_by(
+                text("agents.embedding <=> :embedding_vec::vector").bindparams(embedding_param)
+            )
+            .limit(limit)
+        )
+        
+        # Execute the query
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
 
     async def update_agent(self, agent: Agent) -> Agent:
         """Update agent."""

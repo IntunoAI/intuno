@@ -17,6 +17,7 @@ async def get_current_user_from_token(
     auth_service: AuthService = Depends(),
 ) -> User:
     """Get current user from JWT token."""
+    
     user_id = auth_service.verify_token(credentials.credentials)
     
     if user_id is None:
@@ -27,7 +28,13 @@ async def get_current_user_from_token(
         )
     
     user = await auth_service.get_user_by_id(user_id)
-    if user is None or not user.is_active:
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    
+    if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
@@ -41,6 +48,7 @@ async def get_current_user_from_api_key(
     auth_service: AuthService = Depends(),
 ) -> User:
     """Get current user from API key."""
+    
     if not x_api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -49,7 +57,13 @@ async def get_current_user_from_api_key(
     
     user = await auth_service.verify_api_key(x_api_key)
     
-    if user is None or not user.is_active:
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key or user inactive",
+        )
+    
+    if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key or user inactive",
@@ -70,22 +84,20 @@ async def get_current_user_optional(
         user_id = auth_service.verify_token(credentials.credentials)
         if user_id:
             user = await auth_service.get_user_by_id(user_id)
-            if user and user.is_active: 
+            if user and user.is_active:
                 return user
-    
     # Try API key
     if x_api_key:
         user = await auth_service.verify_api_key(x_api_key)
         if user and user.is_active:
             return user
-    
     return None
 
 
 # Convenience dependency that tries both methods
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     auth_service: AuthService = Depends(),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> User:
     """Get current user from either JWT token or API key."""
     
@@ -96,11 +108,8 @@ async def get_current_user(
             user = await auth_service.get_user_by_id(user_id)
             if user and user.is_active:
                 return user
-    
-    # Try API key from header (this would need custom middleware)
-    # For now, just raise if no JWT token
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Authentication required",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )

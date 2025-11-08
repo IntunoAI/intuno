@@ -100,13 +100,13 @@ class RegistryService:
         # Return agent with relationships loaded
         return await self.registry_repository.get_agent_by_id(created_agent.id)
 
-    async def search_agents(self, query: AgentSearchQuery) -> List[Agent]:
+    async def list_agents(self, query: AgentSearchQuery) -> List[Agent]:
         """
         Search agents with filters.
         :param query: AgentSearchQuery
         :return: List[Agent]
         """
-        return await self.registry_repository.search_agents(
+        return await self.registry_repository.list_agents(
             tags=query.tags,
             capability=query.capability,
             search_text=query.search,
@@ -124,7 +124,7 @@ class RegistryService:
         query_embedding = await self.embedding_service.generate_embedding(query.query)
         
         # Perform semantic search
-        return await self.registry_repository.semantic_search(
+        return await self.registry_repository.semantic_discover(
             embedding=query_embedding,
             limit=query.limit,
         )
@@ -232,7 +232,7 @@ class RegistryService:
 
         return await self.registry_repository.delete_agent(agent_uuid)
 
-    async def get_user_agents(self, user_id: UUID) -> List[Agent]:
+    async def get_agents_by_user_id(self, user_id: UUID) -> List[Agent]:
         """
         Get all agents for a user.
         :param user_id: UUID
