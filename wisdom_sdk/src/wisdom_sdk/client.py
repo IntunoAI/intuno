@@ -1,9 +1,9 @@
-"""The main client for interacting with the Wisdom API."""
-
 from typing import Any, Dict, List
 
 import httpx
 from pydantic import ValidationError
+
+from src.wisdom_sdk.constants import DEFAULT_BASE_URL
 from src.wisdom_sdk.exceptions import (
     APIKeyMissingError,
     AuthenticationError,
@@ -17,8 +17,6 @@ class WisdomClient:
     """
     The main client for interacting with the Wisdom Agent Network.
     """
-
-    DEFAULT_BASE_URL = "http://localhost:8000"
 
     def __init__(self, api_key: str, base_url: str = DEFAULT_BASE_URL):
         if not api_key:

@@ -1,5 +1,3 @@
-"""Security dependencies for API key authentication."""
-
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader
 from starlette import status

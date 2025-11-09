@@ -1,6 +1,3 @@
-"""Custom exceptions for the Wisdom SDK."""
-
-
 class WisdomError(Exception):
     """Base exception for all Wisdom SDK errors."""
 
