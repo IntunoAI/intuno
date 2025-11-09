@@ -8,7 +8,7 @@ The official Python SDK for the Wisdom Agent Network.
 :license: Apache 2.0, see LICENSE for more details.
 """
 
-from src.wisdom_sdk.client import WisdomClient
+from src.wisdom_sdk.client import AsyncWisdomClient, WisdomClient
 from src.wisdom_sdk.exceptions import (
     APIKeyMissingError,
     AuthenticationError,
@@ -19,6 +19,7 @@ from src.wisdom_sdk.models import Agent, Capability, InvokeResult
 
 __all__ = [
     "WisdomClient",
+    "AsyncWisdomClient",
     "Agent",
     "Capability",
     "InvokeResult",

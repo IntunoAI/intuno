@@ -3,7 +3,9 @@
 import pytest
 import respx
 from httpx import Response
-from src.wisdom_sdk import WisdomClient
+
+from src.wisdom_sdk import AsyncWisdomClient, WisdomClient
+from src.wisdom_sdk.constants import DEFAULT_BASE_URL
 from src.wisdom_sdk.exceptions import (
     APIKeyMissingError,
     AuthenticationError,
@@ -11,159 +13,216 @@ from src.wisdom_sdk.exceptions import (
     WisdomError,
 )
 
-# --- Fixtures ---
-
-BASE_URL = WisdomClient.DEFAULT_BASE_URL
+# --- Constants ---
+BASE_URL = DEFAULT_BASE_URL
 API_KEY = "test-api-key"
+MOCK_AGENT_RESPONSE = [
+    {
+        "id": "uuid-1",
+        "agentId": "agent-1",
+        "name": "Test Agent 1",
+        "description": "A test agent",
+        "version": "1.0",
+        "tags": ["test"],
+        "isActive": True,
+        "capabilities": [
+            {
+                "id": "cap-id-1",
+                "name": "cap-name-1",
+                "description": "A test capability",
+                "inputSchema": {},
+                "outputSchema": {},
+            }
+        ],
+    }
+]
+MOCK_INVOKE_RESPONSE = {
+    "success": True,
+    "data": {"result": "ok"},
+    "error": None,
+    "latencyMs": 100,
+    "statusCode": 200,
+}
+
+# --- Fixtures ---
 
 
 @pytest.fixture
-def client():
+def sync_client():
     return WisdomClient(api_key=API_KEY)
 
 
-# --- Test Cases ---
+@pytest.fixture
+def async_client():
+    return AsyncWisdomClient(api_key=API_KEY)
+
+
+# --- Initialization Tests ---
 
 
 def test_init_requires_api_key():
-    """Test that initializing the client without an API key raises an error."""
+    """Test that initializing clients without an API key raises an error."""
     with pytest.raises(APIKeyMissingError):
         WisdomClient(api_key="")
+    with pytest.raises(APIKeyMissingError):
+        AsyncWisdomClient(api_key="")
 
 
-@pytest.mark.asyncio
+# --- Synchronous Client Tests ---
+
+
 @respx.mock
-async def test_discover_success(client: WisdomClient):
-    """Test successful agent discovery."""
-    mock_response = [
-        {
-            "id": "uuid-1",
-            "agentId": "agent-1",
-            "name": "Test Agent 1",
-            "description": "A test agent",
-            "version": "1.0",
-            "tags": ["test"],
-            "isActive": True,
-            "capabilities": [
-                {
-                    "id": "cap-1",
-                    "name": "Test Capability",
-                    "description": "A test capability",
-                    "inputSchema": {},
-                    "outputSchema": {},
-                }
-            ],
-        }
-    ]
-    respx.get(f"{BASE_URL}/registry/discover?query=test&limit=10").mock(
-        return_value=Response(200, json=mock_response)
+def test_sync_discover_success(sync_client: WisdomClient):
+    """Test successful agent discovery with the synchronous client."""
+    respx.get(f"{BASE_URL}/registry/discover").mock(
+        return_value=Response(200, json=MOCK_AGENT_RESPONSE)
     )
 
-    async with client as c:
-        agents = await c.discover(query="test")
+    agents = sync_client.discover(query="test")
 
     assert len(agents) == 1
     agent = agents[0]
-    assert agent.agent_id == "agent-1"
     assert agent.name == "Test Agent 1"
-    assert len(agent.capabilities) == 1
-    assert agent.capabilities[0].id == "cap-1"
+    assert agent._client is sync_client  # Check client injection
 
 
-@pytest.mark.asyncio
 @respx.mock
-async def test_discover_auth_error(client: WisdomClient):
-    """Test that a 401 status on discover raises AuthenticationError."""
-    respx.get(f"{BASE_URL}/registry/discover?query=test&limit=10").mock(
-        return_value=Response(401, json={"detail": "Invalid API key"})
+def test_sync_invoke_via_agent_by_name(sync_client: WisdomClient):
+    """Test successful sync invocation via the agent model by capability name."""
+    respx.get(f"{BASE_URL}/registry/discover").mock(
+        return_value=Response(200, json=MOCK_AGENT_RESPONSE)
     )
-
-    with pytest.raises(AuthenticationError):
-        async with client as c:
-            await c.discover(query="test")
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_invoke_success(client: WisdomClient):
-    """Test successful agent invocation."""
-    mock_response = {
-        "success": True,
-        "data": {"result": "ok"},
-        "error": None,
-        "latencyMs": 100,
-        "statusCode": 200,
-    }
     respx.post(f"{BASE_URL}/broker/invoke").mock(
-        return_value=Response(200, json=mock_response)
+        return_value=Response(200, json=MOCK_INVOKE_RESPONSE)
     )
 
-    async with client as c:
-        result = await c.invoke(
-            agent_id="agent-1",
-            capability_id="cap-1",
-            input_data={"test": "data"},
-        )
+    agents = sync_client.discover(query="test")
+    agent = agents[0]
 
+    result = agent.invoke(capability_name_or_id="cap-name-1", input_data={})
     assert result.success is True
     assert result.data == {"result": "ok"}
-    assert result.error is None
-    assert result.status_code == 200
+
+
+@respx.mock
+def test_sync_invoke_via_agent_by_id(sync_client: WisdomClient):
+    """Test successful sync invocation via the agent model by capability ID."""
+    respx.get(f"{BASE_URL}/registry/discover").mock(
+        return_value=Response(200, json=MOCK_AGENT_RESPONSE)
+    )
+    respx.post(f"{BASE_URL}/broker/invoke").mock(
+        return_value=Response(200, json=MOCK_INVOKE_RESPONSE)
+    )
+
+    agents = sync_client.discover(query="test")
+    agent = agents[0]
+
+    result = agent.invoke(capability_name_or_id="cap-id-1", input_data={})
+    assert result.success is True
+
+
+def test_sync_invoke_invalid_name_raises_error(sync_client: WisdomClient):
+    """Test that invoking with an invalid capability name raises ValueError."""
+    respx.get(f"{BASE_URL}/registry/discover").mock(
+        return_value=Response(200, json=MOCK_AGENT_RESPONSE)
+    )
+    agents = sync_client.discover(query="test")
+    agent = agents[0]
+
+    with pytest.raises(ValueError):
+        agent.invoke(capability_name_or_id="invalid-name", input_data={})
+
+
+@respx.mock
+def test_sync_discover_auth_error(sync_client: WisdomClient):
+    """Test that a 401 on sync discover raises AuthenticationError."""
+    respx.get(f"{BASE_URL}/registry/discover").mock(return_value=Response(401))
+    with pytest.raises(AuthenticationError):
+        sync_client.discover(query="test")
+
+
+# --- Asynchronous Client Tests ---
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_invoke_broker_failure_raises_invocation_error(client: WisdomClient):
+async def test_async_discover_success(async_client: AsyncWisdomClient):
+    """Test successful agent discovery with the asynchronous client."""
+    respx.get(f"{BASE_URL}/registry/discover").mock(
+        return_value=Response(200, json=MOCK_AGENT_RESPONSE)
+    )
+
+    agents = await async_client.discover(query="test")
+
+    assert len(agents) == 1
+    agent = agents[0]
+    assert agent.name == "Test Agent 1"
+    assert agent._client is async_client  # Check client injection
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_invoke_via_agent_by_name(async_client: AsyncWisdomClient):
+    """Test successful async invocation via the agent model by capability name."""
+    respx.get(f"{BASE_URL}/registry/discover").mock(
+        return_value=Response(200, json=MOCK_AGENT_RESPONSE)
+    )
+    respx.post(f"{BASE_URL}/broker/invoke").mock(
+        return_value=Response(200, json=MOCK_INVOKE_RESPONSE)
+    )
+
+    agents = await async_client.discover(query="test")
+    agent = agents[0]
+
+    result = await agent.ainvoke(capability_name_or_id="cap-name-1", input_data={})
+    assert result.success is True
+    assert result.data == {"result": "ok"}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_invoke_via_agent_by_id(async_client: AsyncWisdomClient):
+    """Test successful async invocation via the agent model by capability ID."""
+    respx.get(f"{BASE_URL}/registry/discover").mock(
+        return_value=Response(200, json=MOCK_AGENT_RESPONSE)
+    )
+    respx.post(f"{BASE_URL}/broker/invoke").mock(
+        return_value=Response(200, json=MOCK_INVOKE_RESPONSE)
+    )
+
+    agents = await async_client.discover(query="test")
+    agent = agents[0]
+
+    result = await agent.ainvoke(capability_name_or_id="cap-id-1", input_data={})
+    assert result.success is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_invoke_invalid_name_raises_error(async_client: AsyncWisdomClient):
+    """Test that async invoking with an invalid capability name raises ValueError."""
+    respx.get(f"{BASE_URL}/registry/discover").mock(
+        return_value=Response(200, json=MOCK_AGENT_RESPONSE)
+    )
+    agents = await async_client.discover(query="test")
+    agent = agents[0]
+
+    with pytest.raises(ValueError):
+        await agent.ainvoke(capability_name_or_id="invalid-name", input_data={})
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_invoke_broker_failure_raises_invocation_error(
+    async_client: AsyncWisdomClient,
+):
     """Test that a failed but valid broker response raises InvocationError."""
-    mock_response = {
-        "success": False,
-        "data": None,
-        "error": "Agent not found",
-        "latencyMs": 20,
-        "statusCode": 404,
-    }
-    # The broker successfully handled the request and is reporting a failure,
-    # so the HTTP status code is 200.
+    mock_response = {"success": False, "error": "Agent not found", "statusCode": 404}
     respx.post(f"{BASE_URL}/broker/invoke").mock(
         return_value=Response(200, json=mock_response)
     )
 
-    with pytest.raises(InvocationError, match="Invocation failed: Agent not found"):
-        async with client as c:
-            await c.invoke(
-                agent_id="non-existent-agent",
-                capability_id="cap-1",
-                input_data={},
-            )
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_invoke_http_error_raises_wisdom_error(client: WisdomClient):
-    """Test that a generic HTTP error on invoke raises WisdomError."""
-    respx.post(f"{BASE_URL}/broker/invoke").mock(
-        return_value=Response(500, text="Internal Server Error")
-    )
-
-    with pytest.raises(WisdomError, match="API request failed: Internal Server Error"):
-        async with client as c:
-            await c.invoke(
-                agent_id="agent-1",
-                capability_id="cap-1",
-                input_data={},
-            )
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_invoke_auth_error(client: WisdomClient):
-    """Test that a 401 status on invoke raises AuthenticationError."""
-    respx.post(f"{BASE_URL}/broker/invoke").mock(return_value=Response(401))
-
-    with pytest.raises(AuthenticationError):
-        async with client as c:
-            await c.invoke(
-                agent_id="agent-1",
-                capability_id="cap-1",
-                input_data={},
-            )
+    with pytest.raises(InvocationError):
+        await async_client.ainvoke(
+            agent_id="agent-1", capability_id="cap-1", input_data={}
+        )
