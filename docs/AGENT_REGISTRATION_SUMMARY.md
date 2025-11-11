@@ -154,7 +154,7 @@ curl -X POST "http://localhost:8000/broker/invoke" \
 
 ### 3. Test Demo Workflow
 - Open http://localhost:8000/static/index.html
-- Login with demo@aaww.io / demo
+- Login with demo@intuno.io / demo
 - Go to "Demo Workflow" tab
 - Click "Run Demo Workflow"
 

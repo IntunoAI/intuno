@@ -1,4 +1,4 @@
-# AAWW API Endpoints
+# Intuno API Endpoints
 
 ## Authentication
 
@@ -102,7 +102,7 @@ The API supports two authentication methods:
 
 ## Agent Manifest Format
 
-Agents must provide a manifest following the AAWW specification:
+Agents must provide a manifest following the Intuno specification:
 
 ```json
 {

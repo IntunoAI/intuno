@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "wisdom-sdk"
+name = "intuno-sdk"
 version = "0.1.0"
-description = "The official Python SDK for the Wisdom Agent Network."
+description = "The official Python SDK for the Intuno Agent Network."
 authors = ["Alquify Inc. <hello@alquify.com>"]
 readme = "README.md"
-packages = [{include = "wisdom_sdk", from = "src"}]
+packages = [{include = "intuno_sdk", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"

@@ -1,21 +1,21 @@
 """
 This module provides integration with the OpenAI API.
 
-It allows converting Wisdom Agent Capabilities into a format that can be used
+It allows converting Intuno Agent Capabilities into a format that can be used
 with the OpenAI API's 'tools' parameter.
 """
 
 from typing import Any, Dict, List
 
-from src.wisdom_sdk.models import Agent
+from src.intuno_sdk.models import Agent
 
 
 def get_discovery_tool_openai_schema() -> Dict[str, Any]:
     """
-    Returns the OpenAI tool schema for the Wisdom agent discovery tool.
+    Returns the OpenAI tool schema for the Intuno agent discovery tool.
 
     This provides a static definition for a tool that allows an LLM to search
-    the Wisdom Network. The developer is responsible for handling the actual
+    the Intuno Network. The developer is responsible for handling the actual
     tool call by taking the arguments and passing them to `client.discover()`.
 
     Returns:
@@ -25,8 +25,8 @@ def get_discovery_tool_openai_schema() -> Dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": "wisdom_agent_discovery",
-            "description": "Searches the Wisdom Agent Network to find agents with specific capabilities. Use this when you need a new tool to solve a user's request.",
+            "name": "intuno_agent_discovery",
+            "description": "Searches the Intuno Agent Network to find agents with specific capabilities. Use this when you need a new tool to solve a user's request.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -45,11 +45,11 @@ def make_openai_tools_from_agent(agent: Agent) -> List[Dict[str, Any]]:
     """
     Converts an agent's capabilities into a list of OpenAI-compatible tools.
 
-    This function iterates through the capabilities of a discovered Wisdom Agent
+    This function iterates through the capabilities of a discovered Intuno Agent
     and formats each one into the JSON schema dictionary that the OpenAI API
     expects for its `tools` parameter.
 
-    This allows an OpenAI-powered model to "know" about the Wisdom agent's
+    This allows an OpenAI-powered model to "know" about the Intuno agent's
     capabilities and request to call them. The actual invocation would then
     be handled by your code, using the `agent.invoke()` method.
 
@@ -61,7 +61,7 @@ def make_openai_tools_from_agent(agent: Agent) -> List[Dict[str, Any]]:
         format expected by the OpenAI API.
 
     Example:
-        >>> client = WisdomClient(api_key="...")
+        >>> client = IntunoClient(api_key="...")
         >>> agents = client.discover(query="weather forecaster")
         >>> if agents:
         ...     openai_tools = make_openai_tools_from_agent(agents[0])

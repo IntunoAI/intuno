@@ -75,7 +75,7 @@ class BrokerService:
                     json=request_payload,
                     headers={
                         "Content-Type": "application/json",
-                        "User-Agent": "AAWW-Broker/1.0",
+                        "User-Agent": "Intuno-Broker/1.0",
                     }
                 )
                 

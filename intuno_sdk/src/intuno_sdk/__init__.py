@@ -1,29 +1,29 @@
 """
-Wisdom SDK
+Intuno SDK
 ~~~~~~~~~~
 
-The official Python SDK for the Wisdom Agent Network.
+The official Python SDK for the Intuno Agent Network.
 
 :copyright: (c) 2025 by Alquify Inc.
 :license: Apache 2.0, see LICENSE for more details.
 """
 
-from src.wisdom_sdk.client import AsyncWisdomClient, WisdomClient
-from src.wisdom_sdk.exceptions import (
+from src.intuno_sdk.client import AsyncIntunoClient, IntunoClient
+from src.intuno_sdk.exceptions import (
     APIKeyMissingError,
     AuthenticationError,
     InvocationError,
-    WisdomError,
+    IntunoError,
 )
-from src.wisdom_sdk.models import Agent, Capability, InvokeResult
+from src.intuno_sdk.models import Agent, Capability, InvokeResult
 
 __all__ = [
-    "WisdomClient",
-    "AsyncWisdomClient",
+    "IntunoClient",
+    "AsyncIntunoClient",
     "Agent",
     "Capability",
     "InvokeResult",
-    "WisdomError",
+    "IntunoError",
     "APIKeyMissingError",
     "AuthenticationError",
     "InvocationError",

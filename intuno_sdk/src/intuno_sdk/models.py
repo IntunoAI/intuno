@@ -1,11 +1,11 @@
-"""Pydantic models for the Wisdom SDK."""
+"""Pydantic models for the Intuno SDK."""
 
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, PrivateAttr
 
 if TYPE_CHECKING:
-    from src.wisdom_sdk.client import AsyncWisdomClient, WisdomClient
+    from src.intuno_sdk.client import AsyncIntunoClient, IntunoClient
 
 
 class Capability(BaseModel):
@@ -19,7 +19,7 @@ class Capability(BaseModel):
 
 
 class Agent(BaseModel):
-    """Represents a Wisdom Agent."""
+    """Represents an Intuno Agent."""
 
     id: str  # Internal UUID
     agent_id: str = Field(..., alias="agentId")
@@ -30,7 +30,7 @@ class Agent(BaseModel):
     is_active: bool = Field(..., alias="isActive")
     capabilities: List[Capability]
 
-    _client: Optional[Union["WisdomClient", "AsyncWisdomClient"]] = PrivateAttr(
+    _client: Optional[Union["IntunoClient", "AsyncIntunoClient"]] = PrivateAttr(
         default=None
     )
 

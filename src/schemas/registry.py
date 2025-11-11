@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class CapabilitySchema(BaseModel):
-    """Capability schema matching the AAWW spec."""
+    """Capability schema matching the Intuno spec."""
     
     id: str
     input_schema: Dict[str, Any]
@@ -17,7 +17,7 @@ class CapabilitySchema(BaseModel):
 
 
 class AgentManifest(BaseModel):
-    """Agent manifest schema matching the AAWW spec."""
+    """Agent manifest schema matching the Intuno spec."""
     
     agent_id: str
     name: str

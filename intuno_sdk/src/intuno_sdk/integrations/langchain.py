@@ -1,35 +1,35 @@
 """
 This module provides integration with the LangChain ecosystem.
 
-It allows converting Wisdom Agent Capabilities into LangChain Tools, which can be
+It allows converting Intuno Agent Capabilities into LangChain Tools, which can be
 used by LangChain agents. It also provides a pre-packaged tool for discovering
-agents on the Wisdom Network.
+agents on the Intuno Network.
 """
 
 from typing import Any, Dict, List, Type, Union
 
 from pydantic import BaseModel, Field, create_model
 
-from src.wisdom_sdk.client import AsyncWisdomClient, WisdomClient
-from src.wisdom_sdk.models import Agent
+from src.intuno_sdk.client import AsyncIntunoClient, IntunoClient
+from src.intuno_sdk.models import Agent
 
 try:
     from langchain_core.tools import BaseTool, Tool
 except ImportError:
     raise ImportError(
-        "LangChain is not installed. Please install it with 'pip install wisdom-sdk[langchain]'"
+        "LangChain is not installed. Please install it with 'pip install intuno-sdk[langchain]'"
     )
 
 
-def create_discovery_tool(client: Union[WisdomClient, AsyncWisdomClient]) -> BaseTool:
+def create_discovery_tool(client: Union[IntunoClient, AsyncIntunoClient]) -> BaseTool:
     """
-    Creates a LangChain Tool for discovering agents on the Wisdom Network.
+    Creates a LangChain Tool for discovering agents on the Intuno Network.
 
     This tool allows an LLM agent to search for other agents by describing
     the capability it needs in natural language.
 
     Args:
-        client: An initialized synchronous or asynchronous WisdomClient.
+        client: An initialized synchronous or asynchronous IntunoClient.
 
     Returns:
         A LangChain Tool that can be used by an agent.
@@ -56,20 +56,20 @@ def create_discovery_tool(client: Union[WisdomClient, AsyncWisdomClient]) -> Bas
         return summary
 
     def _run_sync(query: str) -> str:
-        if not isinstance(client, WisdomClient):
-            raise TypeError("A synchronous WisdomClient is required.")
+        if not isinstance(client, IntunoClient):
+            raise TypeError("A synchronous IntunoClient is required.")
         agents = client.discover(query=query)
         return _format_discovery_result(agents)
 
     async def _arun_async(query: str) -> str:
-        if not isinstance(client, AsyncWisdomClient):
-            raise TypeError("An asynchronous AsyncWisdomClient is required.")
+        if not isinstance(client, AsyncIntunoClient):
+            raise TypeError("An asynchronous AsyncIntunoClient is required.")
         agents = await client.discover(query=query)
         return _format_discovery_result(agents)
 
     return Tool(
-        name="wisdom_agent_discovery",
-        description="Searches the Wisdom Agent Network to find agents with specific capabilities. Use this when you need a new tool to solve a user's request.",
+        name="intuno_agent_discovery",
+        description="Searches the Intuno Agent Network to find agents with specific capabilities. Use this when you need a new tool to solve a user's request.",
         func=_run_sync,
         coroutine=_arun_async,
         args_schema=DiscoveryInput,
@@ -100,7 +100,7 @@ def make_tools_from_agent(agent: Agent) -> List[Tool]:
     """
     Converts an agent's capabilities into a list of LangChain Tools.
 
-    This function iterates through the capabilities of a discovered Wisdom Agent
+    This function iterates through the capabilities of a discovered Intuno Agent
     and wraps each one in a LangChain `Tool` object.
 
     Args:

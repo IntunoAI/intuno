@@ -3,19 +3,19 @@ from typing import Any, Dict, List
 import httpx
 from pydantic import ValidationError
 
-from src.wisdom_sdk.constants import DEFAULT_BASE_URL
-from src.wisdom_sdk.exceptions import (
+from src.intuno_sdk.constants import DEFAULT_BASE_URL
+from src.intuno_sdk.exceptions import (
     APIKeyMissingError,
     AuthenticationError,
     InvocationError,
-    WisdomError,
+    IntunoError,
 )
-from src.wisdom_sdk.models import Agent, InvokeResult
+from src.intuno_sdk.models import Agent, InvokeResult
 
 
-class WisdomClient:
+class IntunoClient:
     """
-    The main synchronous client for interacting with the Wisdom Agent Network.
+    The main synchronous client for interacting with the Intuno Agent Network.
     """
 
     def __init__(self, api_key: str, base_url: str = DEFAULT_BASE_URL):
@@ -29,7 +29,7 @@ class WisdomClient:
             headers={
                 "X-API-Key": self.api_key,
                 "Content-Type": "application/json",
-                "User-Agent": "Wisdom-SDK/0.1.0",
+                "User-Agent": "Intuno-SDK/0.1.0",
             },
         )
 
@@ -56,9 +56,9 @@ class WisdomClient:
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 raise AuthenticationError("Invalid API key.") from e
-            raise WisdomError(f"API request failed: {e.response.text}") from e
+            raise IntunoError(f"API request failed: {e.response.text}") from e
         except (httpx.RequestError, ValidationError) as e:
-            raise WisdomError(f"An unexpected error occurred: {e}") from e
+            raise IntunoError(f"An unexpected error occurred: {e}") from e
 
     def invoke(
         self,
@@ -98,9 +98,9 @@ class WisdomClient:
                 error_details = e.response.json().get("detail", e.response.text)
             except Exception:
                 error_details = e.response.text
-            raise WisdomError(f"API request failed: {error_details}") from e
+            raise IntunoError(f"API request failed: {error_details}") from e
         except (httpx.RequestError, ValidationError) as e:
-            raise WisdomError(f"An unexpected error occurred: {e}") from e
+            raise IntunoError(f"An unexpected error occurred: {e}") from e
 
     def close(self):
         """Closes the underlying HTTP client."""
@@ -113,9 +113,9 @@ class WisdomClient:
         self.close()
 
 
-class AsyncWisdomClient:
+class AsyncIntunoClient:
     """
-    The main asynchronous client for interacting with the Wisdom Agent Network.
+    The main asynchronous client for interacting with the Intuno Agent Network.
     """
 
     def __init__(self, api_key: str, base_url: str = DEFAULT_BASE_URL):
@@ -129,7 +129,7 @@ class AsyncWisdomClient:
             headers={
                 "X-API-Key": self.api_key,
                 "Content-Type": "application/json",
-                "User-Agent": "Wisdom-SDK/0.1.0",
+                "User-Agent": "Intuno-SDK/0.1.0",
             },
         )
 
@@ -156,9 +156,9 @@ class AsyncWisdomClient:
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 401:
                 raise AuthenticationError("Invalid API key.") from e
-            raise WisdomError(f"API request failed: {e.response.text}") from e
+            raise IntunoError(f"API request failed: {e.response.text}") from e
         except (httpx.RequestError, ValidationError) as e:
-            raise WisdomError(f"An unexpected error occurred: {e}") from e
+            raise IntunoError(f"An unexpected error occurred: {e}") from e
 
     async def ainvoke(
         self,
@@ -198,9 +198,9 @@ class AsyncWisdomClient:
                 error_details = e.response.json().get("detail", e.response.text)
             except Exception:
                 error_details = e.response.text
-            raise WisdomError(f"API request failed: {error_details}") from e
+            raise IntunoError(f"API request failed: {error_details}") from e
         except (httpx.RequestError, ValidationError) as e:
-            raise WisdomError(f"An unexpected error occurred: {e}") from e
+            raise IntunoError(f"An unexpected error occurred: {e}") from e
 
     async def close(self):
         """Closes the underlying HTTP client."""

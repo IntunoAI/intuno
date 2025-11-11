@@ -1,1 +1,0 @@
-# Integrations for Wisdom SDK

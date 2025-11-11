@@ -1,18 +1,18 @@
-"""Tests for the Wisdom SDK integrations."""
+"""Tests for the Intuno SDK integrations."""
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from src.wisdom_sdk.integrations.langchain import (
+from src.intuno_sdk.integrations.langchain import (
     create_discovery_tool,
     make_tools_from_agent,
 )
-from src.wisdom_sdk.integrations.openai import (
+from src.intuno_sdk.integrations.openai import (
     get_discovery_tool_openai_schema,
     make_openai_tools_from_agent,
 )
-from src.wisdom_sdk.models import Agent, Capability
+from src.intuno_sdk.models import Agent, Capability
 
 # --- Fixtures ---
 
@@ -51,8 +51,8 @@ def test_create_discovery_tool():
     mock_client.discover.return_value = []  # Mock the discover method
 
     tool = create_discovery_tool(mock_client)
-    assert tool.name == "wisdom_agent_discovery"
-    assert "Searches the Wisdom Agent Network" in tool.description
+    assert tool.name == "intuno_agent_discovery"
+    assert "Searches the Intuno Agent Network" in tool.description
 
     # Test the tool's execution
     tool.func(query="test query")
@@ -86,7 +86,7 @@ def test_get_discovery_tool_openai_schema():
     schema = get_discovery_tool_openai_schema()
 
     assert schema["type"] == "function"
-    assert schema["function"]["name"] == "wisdom_agent_discovery"
+    assert schema["function"]["name"] == "intuno_agent_discovery"
     assert "query" in schema["function"]["parameters"]["properties"]
 
 

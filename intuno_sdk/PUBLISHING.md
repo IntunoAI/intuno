@@ -1,15 +1,15 @@
-# Publishing the Wisdom SDK
+# Publishing the Intuno SDK
 
-This guide provides instructions on how to publish the `wisdom-sdk` to both GitHub and PyPI.
+This guide provides instructions on how to publish the `intuno-sdk` to both GitHub and PyPI.
 
 ## Publishing to GitHub
 
 Publishing the code to a GitHub repository allows for collaboration, version control, and public visibility.
 
 1.  **Initialize a Git repository:**
-    If you haven't already, initialize a Git repository in the `wisdom_sdk` directory.
+    If you haven't already, initialize a Git repository in the `intuno_sdk` directory.
     ```bash
-    cd /path/to/wisdom_sdk
+    cd /path/to/intuno_sdk
     git init -b main
     ```
 
@@ -17,11 +17,11 @@ Publishing the code to a GitHub repository allows for collaboration, version con
     Add all the SDK files to staging and make your first commit.
     ```bash
     git add .
-    git commit -m "Initial commit: Scaffold Wisdom SDK"
+    git commit -m "Initial commit: Scaffold Intuno SDK"
     ```
 
 3.  **Create a Repository on GitHub:**
-    Go to [GitHub](https://github.com) and create a new public repository. Give it a name like `wisdom-sdk`. Do not initialize it with a README or .gitignore, as we have already created those.
+    Go to [GitHub](https://github.com) and create a new public repository. Give it a name like `intuno-sdk`. Do not initialize it with a README or .gitignore, as we have already created those.
 
 4.  **Link and Push:**
     Link your local repository to the remote one on GitHub and push your code.
@@ -41,7 +41,7 @@ Publishing the package to the Python Package Index (PyPI) makes it publicly avai
     If you don't have one, create an account on [PyPI](https://pypi.org/).
 
 2.  **Get an API Token:**
-    After logging in, go to your "Account settings" and create a new API token. When creating the token, scope it to the specific project (`wisdom-sdk`) if you wish, or to your entire account. **Copy this token immediately**, as you will not be able to see it again.
+    After logging in, go to your "Account settings" and create a new API token. When creating the token, scope it to the specific project (`intuno-sdk`) if you wish, or to your entire account. **Copy this token immediately**, as you will not be able to see it again.
 
 ### Publishing Steps
 

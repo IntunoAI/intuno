@@ -1,23 +1,23 @@
-# Wisdom Python SDK
+# Intuno Python SDK
 
-The official Python SDK for the Wisdom Agent Network.
+The official Python SDK for the Intuno Agent Network.
 
 ## Installation
 
 ```bash
-pip install wisdom-sdk
+pip install intuno-sdk
 ```
 
 For integrations with LangChain or OpenAI, you can install the necessary extras:
 ```bash
 # For LangChain
-pip install "wisdom-sdk[langchain]"
+pip install "intuno-sdk[langchain]"
 
 # For OpenAI
-pip install "wisdom-sdk[openai]"
+pip install "intuno-sdk[openai]"
 
 # For both
-pip install "wisdom-sdk[langchain,openai]"
+pip install "intuno-sdk[langchain,openai]"
 ```
 
 ## Basic Usage
@@ -26,15 +26,15 @@ The SDK provides both a synchronous and an asynchronous client.
 
 ### Synchronous Client
 
-Use the `WisdomClient` for synchronous operations.
+Use the `IntunoClient` for synchronous operations.
 
 ```python
 import os
-from wisdom_sdk import WisdomClient
+from intuno_sdk import IntunoClient
 
 # It's recommended to load the API key from environment variables
-api_key = os.environ.get("WISDOM_API_KEY", "wsk_...")
-client = WisdomClient(api_key=api_key)
+api_key = os.environ.get("INTUNO_API_KEY", "wsk_...")
+client = IntunoClient(api_key=api_key)
 
 # Discover agents using natural language
 agents = client.discover(query="An agent that can provide weather forecasts")
@@ -60,16 +60,16 @@ else:
 
 ### Asynchronous Client
 
-For use with `asyncio`, use the `AsyncWisdomClient`.
+For use with `asyncio`, use the `AsyncIntunoClient`.
 
 ```python
 import asyncio
 import os
-from wisdom_sdk import AsyncWisdomClient
+from intuno_sdk import AsyncIntunoClient
 
 async def main():
-    api_key = os.environ.get("WISDOM_API_KEY", "wsk_...")
-    async with AsyncWisdomClient(api_key=api_key) as client:
+    api_key = os.environ.get("INTUNO_API_KEY", "wsk_...")
+    async with AsyncIntunoClient(api_key=api_key) as client:
         agents = await client.discover(query="calculator")
         if agents:
             calculator = agents[0]
@@ -86,19 +86,19 @@ if __name__ == "__main__":
 
 ## Integrations
 
-To build a truly autonomous agent, the agent must be able to find *new* tools on its own. The Wisdom SDK provides a "discovery tool" that you can give to your LLM agent, allowing it to search the Wisdom Network for other agents at runtime.
+To build a truly autonomous agent, the agent must be able to find *new* tools on its own. The Intuno SDK provides a "discovery tool" that you can give to your LLM agent, allowing it to search the Intuno Network for other agents at runtime.
 
 ### Autonomous Discovery with LangChain
 
 The `create_discovery_tool` function returns a `Tool` that your LangChain agent can use.
 
 ```python
-from wisdom_sdk import WisdomClient
-from wisdom_sdk.integrations.langchain import create_discovery_tool
+from intuno_sdk import IntunoClient
+from intuno_sdk.integrations.langchain import create_discovery_tool
 from langchain.agents import initialize_agent, AgentType
 from langchain_openai import OpenAI
 
-client = WisdomClient(api_key=os.environ.get("WISDOM_API_KEY", "wsk_..."))
+client = IntunoClient(api_key=os.environ.get("INTUNO_API_KEY", "wsk_..."))
 
 # Create the discovery tool and add it to the agent's tool list
 discovery_tool = create_discovery_tool(client)
@@ -120,13 +120,13 @@ Here is a complete, end-to-end example of the discovery workflow:
 ```python
 import os
 import json
-from wisdom_sdk import WisdomClient
-from wisdom_sdk.integrations.openai import get_discovery_tool_openai_schema
+from intuno_sdk import IntunoClient
+from intuno_sdk.integrations.openai import get_discovery_tool_openai_schema
 import openai
 
 # 1. Initialize clients
-# Make sure WISDOM_API_KEY and OPENAI_API_KEY are set in your environment
-client = WisdomClient(api_key=os.environ.get("WISDOM_API_KEY"))
+# Make sure INTUNO_API_KEY and OPENAI_API_KEY are set in your environment
+client = IntunoClient(api_key=os.environ.get("INTUNO_API_KEY"))
 openai_client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # 2. Define the tools for the LLM, including the discovery tool
@@ -154,11 +154,11 @@ else:
 
     # 5. Execute the tool call(s)
     for tool_call in tool_calls:
-        if tool_call.function.name == "wisdom_agent_discovery":
+        if tool_call.function.name == "intuno_agent_discovery":
             print(f"Executing discovery with query: {tool_call.function.arguments}")
             args = json.loads(tool_call.function.arguments)
             
-            # Call the actual discovery method from the Wisdom SDK
+            # Call the actual discovery method from the Intuno SDK
             discovered_agents = client.discover(query=args["query"])
             
             # Format the results to send back to the LLM
@@ -197,12 +197,12 @@ Once your agent has discovered another agent, you can use the `make_tools_from_a
 #### LangChain
 
 ```python
-from wisdom_sdk import WisdomClient
-from wisdom_sdk.integrations.langchain import make_tools_from_agent
+from intuno_sdk import IntunoClient
+from intuno_sdk.integrations.langchain import make_tools_from_agent
 from langchain.agents import initialize_agent, AgentType
 from langchain_openai import OpenAI
 
-# Assume client is an initialized WisdomClient
+# Assume client is an initialized IntunoClient
 agents = client.discover(query="A calculator agent")
 if agents:
     calculator_agent = agents[0]
@@ -221,11 +221,11 @@ if agents:
 #### OpenAI
 
 ```python
-from wisdom_sdk import WisdomClient
-from wisdom_sdk.integrations.openai import make_openai_tools_from_agent
+from intuno_sdk import IntunoClient
+from intuno_sdk.integrations.openai import make_openai_tools_from_agent
 import openai
 
-# Assume client is an initialized WisdomClient
+# Assume client is an initialized IntunoClient
 agents = client.discover(query="A weather forecast agent")
 if agents:
     weather_agent = agents[0]

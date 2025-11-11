@@ -8,7 +8,7 @@ from src.routes.health import router as health_router
 from src.routes.registry import router as registry_router
 
 app = FastAPI(
-    title="AAWW - AI Agent Wide Web",
+    title="Intuno",
     description="Registry and broker for AI agent discovery and collaboration",
     version=settings.API_VERSION,
 )

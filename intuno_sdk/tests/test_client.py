@@ -1,16 +1,16 @@
-"""Tests for the Wisdom SDK client."""
+"""Tests for the Intuno SDK client."""
 
 import pytest
 import respx
 from httpx import Response
 
-from src.wisdom_sdk import AsyncWisdomClient, WisdomClient
-from src.wisdom_sdk.constants import DEFAULT_BASE_URL
-from src.wisdom_sdk.exceptions import (
+from src.intuno_sdk import AsyncIntunoClient, IntunoClient
+from src.intuno_sdk.constants import DEFAULT_BASE_URL
+from src.intuno_sdk.exceptions import (
     APIKeyMissingError,
     AuthenticationError,
     InvocationError,
-    WisdomError,
+    IntunoError,
 )
 
 # --- Constants ---
@@ -49,12 +49,12 @@ MOCK_INVOKE_RESPONSE = {
 
 @pytest.fixture
 def sync_client():
-    return WisdomClient(api_key=API_KEY)
+    return IntunoClient(api_key=API_KEY)
 
 
 @pytest.fixture
 def async_client():
-    return AsyncWisdomClient(api_key=API_KEY)
+    return AsyncIntunoClient(api_key=API_KEY)
 
 
 # --- Initialization Tests ---
@@ -63,16 +63,16 @@ def async_client():
 def test_init_requires_api_key():
     """Test that initializing clients without an API key raises an error."""
     with pytest.raises(APIKeyMissingError):
-        WisdomClient(api_key="")
+        IntunoClient(api_key="")
     with pytest.raises(APIKeyMissingError):
-        AsyncWisdomClient(api_key="")
+        AsyncIntunoClient(api_key="")
 
 
 # --- Synchronous Client Tests ---
 
 
 @respx.mock
-def test_sync_discover_success(sync_client: WisdomClient):
+def test_sync_discover_success(sync_client: IntunoClient):
     """Test successful agent discovery with the synchronous client."""
     respx.get(f"{BASE_URL}/registry/discover").mock(
         return_value=Response(200, json=MOCK_AGENT_RESPONSE)
@@ -87,7 +87,7 @@ def test_sync_discover_success(sync_client: WisdomClient):
 
 
 @respx.mock
-def test_sync_invoke_via_agent_by_name(sync_client: WisdomClient):
+def test_sync_invoke_via_agent_by_name(sync_client: IntunoClient):
     """Test successful sync invocation via the agent model by capability name."""
     respx.get(f"{BASE_URL}/registry/discover").mock(
         return_value=Response(200, json=MOCK_AGENT_RESPONSE)
@@ -105,7 +105,7 @@ def test_sync_invoke_via_agent_by_name(sync_client: WisdomClient):
 
 
 @respx.mock
-def test_sync_invoke_via_agent_by_id(sync_client: WisdomClient):
+def test_sync_invoke_via_agent_by_id(sync_client: IntunoClient):
     """Test successful sync invocation via the agent model by capability ID."""
     respx.get(f"{BASE_URL}/registry/discover").mock(
         return_value=Response(200, json=MOCK_AGENT_RESPONSE)
@@ -121,7 +121,7 @@ def test_sync_invoke_via_agent_by_id(sync_client: WisdomClient):
     assert result.success is True
 
 
-def test_sync_invoke_invalid_name_raises_error(sync_client: WisdomClient):
+def test_sync_invoke_invalid_name_raises_error(sync_client: IntunoClient):
     """Test that invoking with an invalid capability name raises ValueError."""
     respx.get(f"{BASE_URL}/registry/discover").mock(
         return_value=Response(200, json=MOCK_AGENT_RESPONSE)
@@ -134,7 +134,7 @@ def test_sync_invoke_invalid_name_raises_error(sync_client: WisdomClient):
 
 
 @respx.mock
-def test_sync_discover_auth_error(sync_client: WisdomClient):
+def test_sync_discover_auth_error(sync_client: IntunoClient):
     """Test that a 401 on sync discover raises AuthenticationError."""
     respx.get(f"{BASE_URL}/registry/discover").mock(return_value=Response(401))
     with pytest.raises(AuthenticationError):
@@ -146,7 +146,7 @@ def test_sync_discover_auth_error(sync_client: WisdomClient):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_async_discover_success(async_client: AsyncWisdomClient):
+async def test_async_discover_success(async_client: AsyncIntunoClient):
     """Test successful agent discovery with the asynchronous client."""
     respx.get(f"{BASE_URL}/registry/discover").mock(
         return_value=Response(200, json=MOCK_AGENT_RESPONSE)
@@ -162,7 +162,7 @@ async def test_async_discover_success(async_client: AsyncWisdomClient):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_async_invoke_via_agent_by_name(async_client: AsyncWisdomClient):
+async def test_async_invoke_via_agent_by_name(async_client: AsyncIntunoClient):
     """Test successful async invocation via the agent model by capability name."""
     respx.get(f"{BASE_URL}/registry/discover").mock(
         return_value=Response(200, json=MOCK_AGENT_RESPONSE)
@@ -181,7 +181,7 @@ async def test_async_invoke_via_agent_by_name(async_client: AsyncWisdomClient):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_async_invoke_via_agent_by_id(async_client: AsyncWisdomClient):
+async def test_async_invoke_via_agent_by_id(async_client: AsyncIntunoClient):
     """Test successful async invocation via the agent model by capability ID."""
     respx.get(f"{BASE_URL}/registry/discover").mock(
         return_value=Response(200, json=MOCK_AGENT_RESPONSE)
@@ -199,7 +199,7 @@ async def test_async_invoke_via_agent_by_id(async_client: AsyncWisdomClient):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_async_invoke_invalid_name_raises_error(async_client: AsyncWisdomClient):
+async def test_async_invoke_invalid_name_raises_error(async_client: AsyncIntunoClient):
     """Test that async invoking with an invalid capability name raises ValueError."""
     respx.get(f"{BASE_URL}/registry/discover").mock(
         return_value=Response(200, json=MOCK_AGENT_RESPONSE)
@@ -214,7 +214,7 @@ async def test_async_invoke_invalid_name_raises_error(async_client: AsyncWisdomC
 @pytest.mark.asyncio
 @respx.mock
 async def test_async_invoke_broker_failure_raises_invocation_error(
-    async_client: AsyncWisdomClient,
+    async_client: AsyncIntunoClient,
 ):
     """Test that a failed but valid broker response raises InvocationError."""
     mock_response = {"success": False, "error": "Agent not found", "statusCode": 404}

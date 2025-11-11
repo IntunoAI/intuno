@@ -1,10 +1,10 @@
-class WisdomError(Exception):
-    """Base exception for all Wisdom SDK errors."""
+class IntunoError(Exception):
+    """Base exception for all Intuno SDK errors."""
 
     pass
 
 
-class APIKeyMissingError(WisdomError):
+class APIKeyMissingError(IntunoError):
     """Raised when the API key is not provided."""
 
     def __init__(self, message="API key is required for authentication."):
@@ -12,13 +12,13 @@ class APIKeyMissingError(WisdomError):
         super().__init__(self.message)
 
 
-class AuthenticationError(WisdomError):
+class AuthenticationError(IntunoError):
     """Raised when authentication fails."""
 
     pass
 
 
-class InvocationError(WisdomError):
+class InvocationError(IntunoError):
     """Raised when an agent invocation fails."""
 
     pass

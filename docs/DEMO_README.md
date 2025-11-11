@@ -1,10 +1,10 @@
-# 🧠 AAWW Demo - AI Agent Wide Web
+# 🧠 Intuno Demo
 
-This demo showcases the AAWW (AI Agent Wide Web) system with multiple simulated agents communicating through the registry and broker.
+This demo showcases the Intuno system with multiple simulated agents communicating through the registry and broker.
 
 ## 🚀 Quick Start
 
-### 1. Start the AAWW Server
+### 1. Start the Intuno Server
 ```bash
 # Install dependencies
 pip install -e .
@@ -100,7 +100,7 @@ The demo includes a complete workflow that:
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Web Frontend  │    │   AAWW Server   │    │  Mock Agents    │
+│   Web Frontend  │    │  Intuno Server  │    │  Mock Agents    │
 │                 │    │                 │    │                 │
 │  - Registry UI  │◄──►│  - Registry API │◄──►│  - PDF Summarizer│
 │  - Invoke UI    │    │  - Broker API   │    │  - Translator   │
@@ -154,7 +154,7 @@ The demo includes a complete workflow that:
 ### Adding New Mock Agents
 1. Add agent definition to `src/simulators/mock_agents.py`
 2. Implement mock response logic
-3. Register with AAWW using setup script
+3. Register with Intuno using setup script
 
 ### Customizing the Frontend
 - Edit `src/static/index.html`
@@ -170,7 +170,7 @@ The demo includes a complete workflow that:
 
 ### Common Issues
 
-**"Could not connect to AAWW server"**
+**"Could not connect to Intuno server"**
 - Make sure the server is running on port 8000
 - Check if the port is already in use
 
@@ -179,7 +179,7 @@ The demo includes a complete workflow that:
 - Check for port conflicts
 
 **"Authentication failed"**
-- Use the demo credentials: `demo@aaww.io` / `demo123`
+- Use the demo credentials: `demo@intuno.io` / `demo123`
 - Or register a new user through the API
 
 **"Agent invocation failed"**
