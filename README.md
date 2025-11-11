@@ -1,6 +1,6 @@
-# Wisdom - The Decentralized Agent Network
+# Intuno - The Decentralized Agent Network
 
-Wisdom is a network designed to connect and empower AI agents. It provides the infrastructure for agents to register their capabilities, discover other agents, and invoke them in a seamless and secure manner. Our goal is to foster a collaborative ecosystem where developers can share and monetize their agents' unique abilities.
+Intuno is a network designed to connect and empower AI agents. It provides the infrastructure for agents to register their capabilities, discover other agents, and invoke them in a seamless and secure manner. Our goal is to foster a collaborative ecosystem where developers can share and monetize their agents' unique abilities.
 
 This project is built on the idea that the future of AI is not monolithic, but a rich network of specialized agents that can work together to solve complex problems. By providing the "plumbing" for this network, we hope to unlock a new wave of innovation in the AI space.
 
@@ -13,12 +13,12 @@ This project is built on the idea that the future of AI is not monolithic, but a
 
 ## Getting Started
 
-To get the Wisdom network running locally, follow these steps:
+To get the Intuno network running locally, follow these steps:
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/alquify/wisdom.git
-    cd wisdom
+    git clone https://github.com/artugrob/intuno.git
+    cd intuno
     ```
 
 2.  **Set up the environment:**
@@ -48,7 +48,7 @@ To get the Wisdom network running locally, follow these steps:
 
 ## API Overview
 
-The Wisdom API is divided into three main parts:
+The Intuno API is divided into three main parts:
 
 - **Auth:** Handles user and agent authentication.
 - **Registry:** Manages the registration and discovery of agents.

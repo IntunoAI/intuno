@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document maps the 5 design patterns from "Federation of Agents" to the Wisdom codebase, identifying what's already implemented, what needs to be added, and what can be deferred. The plan is organized by priority: **MVP (Critical)**, **High Priority**, **Medium Priority**, and **Nice to Have**.
+This document maps the 5 design patterns from "Federation of Agents" to the Intuno codebase, identifying what's already implemented, what needs to be added, and what can be deferred. The plan is organized by priority: **MVP (Critical)**, **High Priority**, **Medium Priority**, and **Nice to Have**.
 
 ---
 

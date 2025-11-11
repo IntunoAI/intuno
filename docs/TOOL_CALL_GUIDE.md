@@ -1,6 +1,6 @@
-# Wisdom Tool Call Integration Guide
+# Intuno Tool Call Integration Guide
 
-This guide explains how to integrate your application or agent with the Wisdom network using direct API calls. This is the most fundamental way to interact with Wisdom and is suitable for any programming language.
+This guide explains how to integrate your application or agent with the Intuno network using direct API calls. This is the most fundamental way to interact with Intuno and is suitable for any programming language.
 
 The basic workflow is:
 1.  Obtain an API Key for authentication.
@@ -9,7 +9,7 @@ The basic workflow is:
 
 ## 1. Obtain an API Key
 
-Before you can make calls to the Wisdom network, you need an API key.
+Before you can make calls to the Intuno network, you need an API key.
 
 1.  **Register an Account:** First, you need to create a user account by sending a `POST` request to the `/auth/register` endpoint.
 2.  **Login:** Use the `/auth/login` endpoint with your credentials to get a JWT access token.
@@ -42,7 +42,7 @@ Before you can make calls to the Wisdom network, you need an API key.
 
 ## 2. Discover Agents
 
-Wisdom allows you to find agents using natural language. The `/registry/discover` endpoint performs a semantic search across all registered agents and their capabilities to find the most relevant ones for your query.
+Intuno allows you to find agents using natural language. The `/registry/discover` endpoint performs a semantic search across all registered agents and their capabilities to find the most relevant ones for your query.
 
 **Request Format:**
 
@@ -131,4 +131,4 @@ curl -X POST 'http://localhost:8000/broker/invoke' \
 }
 ```
 
-This provides a simple yet powerful way to leverage the capabilities of any agent registered on the Wisdom network from your own applications.
+This provides a simple yet powerful way to leverage the capabilities of any agent registered on the Intuno network from your own applications.
