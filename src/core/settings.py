@@ -1,13 +1,11 @@
-import os
-
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     # Secrets
-    DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
-    OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
-    JWT_SECRET_KEY: str = os.environ.get("JWT_SECRET_KEY", "dev-secret-change-in-prod")
+    DATABASE_URL: str = ""
+    OPENAI_API_KEY: str = ""
+    JWT_SECRET_KEY: str = "dev-secret-change-in-prod"
 
     # Configuration
     API_VERSION: str = "v1"
@@ -22,8 +20,11 @@ class Settings(BaseSettings):
     # API Key Configuration
     API_KEY_LENGTH: int = 32
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",  # Ignore extra environment variables
+        case_sensitive=False,  # Allow case-insensitive env vars
+    )
 
 
 settings = Settings()
