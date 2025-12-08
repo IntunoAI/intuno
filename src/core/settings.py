@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     # Secrets
     DATABASE_URL: str = ""
     OPENAI_API_KEY: str = ""
+    SAPTIVA_API_KEY: str = ""
     JWT_SECRET_KEY: str = "dev-secret-change-in-prod"
 
     # Configuration
@@ -19,6 +20,14 @@ class Settings(BaseSettings):
 
     # API Key Configuration
     API_KEY_LENGTH: int = 32
+
+    # Qdrant Configuration
+    QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_API_KEY: str = ""
+
+    # LLM Enhancement Configuration
+    ENABLE_LLM_ENHANCEMENT: bool = True
+    LLM_ENHANCEMENT_MODEL: str = "gpt-4o-mini"
 
     model_config = SettingsConfigDict(
         env_file=".env",

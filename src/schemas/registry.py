@@ -63,6 +63,10 @@ class AgentListResponse(BaseModel):
     is_active: bool
     created_at: datetime
     capabilities: List[CapabilitySchema] = []
+    similarity_score: Optional[float] = Field(
+        default=None,
+        description="Similarity score from semantic search (lower is more similar, 0.0-2.0 for cosine distance)"
+    )
 
 
 class AgentSearchQuery(BaseModel):
@@ -80,6 +84,12 @@ class DiscoverQuery(BaseModel):
     
     query: str
     limit: int = Field(default=10, ge=1, le=50)
+    similarity_threshold: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description="Maximum cosine distance (0.0=same, 2.0=opposite). Lower values = more strict matching. None = no threshold (return all results ordered by similarity)."
+    )
 
 
 class AgentCreate(BaseModel):

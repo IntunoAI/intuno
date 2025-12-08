@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: pgvector/pgvector:pg15
+    image: postgres:15
     container_name: wisdom-db
     environment:
       POSTGRES_DB: postgres
@@ -18,5 +18,20 @@ services:
       timeout: 5s
       retries: 5
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: wisdom-qdrant
+    ports:
+      - "6333:6333"  # HTTP API
+      - "6334:6334"  # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
+  qdrant_data:

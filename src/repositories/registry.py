@@ -1,9 +1,9 @@
 """Registry domain repository."""
 
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, text, bindparam
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -98,36 +98,58 @@ class RegistryRepository:
         self,
         embedding: List[float],
         limit: int = 10,
-    ) -> List[Agent]:
+        similarity_threshold: Optional[float] = None,
+    ) -> List[Tuple[Agent, float]]:
         """
-        Semantic discovery using vector similarity with pgvector.
-        Uses cosine distance (<=>) to find the most similar agents.
+        Semantic discovery using vector similarity with Qdrant.
+        Uses cosine distance to find the most similar agents.
+        If similarity_threshold is provided, only returns agents below the threshold.
         :param embedding: List[float] - Query embedding vector
         :param limit: int - Maximum number of results
-        :return: List[Agent] - List of agents ordered by similarity
+        :param similarity_threshold: Optional[float] - Maximum cosine distance (0.0=same, 2.0=opposite). None = no threshold.
+        :return: List[tuple[Agent, float]] - List of (agent, distance) tuples ordered by similarity
         """
-        # Convert embedding list to PostgreSQL array format
-        embedding_str = "{" + ",".join(map(str, embedding)) + "}"
+        from src.utilities.qdrant_service import QdrantService
         
-        # Use cosine distance operator (<=>) for similarity search
-        # Lower distance = higher similarity
-        # We filter for active agents and non-null embeddings
-        # Using text() with bindparam for the pgvector operator
-        embedding_param = bindparam("embedding_vec", embedding_str)
+        qdrant_service = QdrantService()
+        
+        # Search Qdrant for similar vectors
+        # Filter for active agents only
+        results = await qdrant_service.search_similar(
+            query_vector=embedding,
+            limit=limit,
+            similarity_threshold=similarity_threshold,
+            filter_conditions={"is_active": True},
+        )
+        
+        if not results:
+            return []
+        
+        # Extract agent IDs from Qdrant results
+        agent_ids = [UUID(result["id"]) for result in results]
+        
+        # Fetch full Agent objects from PostgreSQL
         query = (
             select(Agent)
             .options(selectinload(Agent.capabilities))
-            .where(Agent.is_active)
-            .where(Agent.embedding.isnot(None))
-            .order_by(
-                text("agents.embedding <=> :embedding_vec::vector").bindparams(embedding_param)
-            )
-            .limit(limit)
+            .where(Agent.id.in_(agent_ids))
         )
         
-        # Execute the query
         result = await self.session.execute(query)
-        return list(result.scalars().all())
+        agents = list(result.scalars().all())
+        
+        # Create a mapping of agent ID to agent
+        agent_dict = {agent.id: agent for agent in agents}
+        
+        # Create a mapping of agent ID to distance from Qdrant results
+        distance_dict = {UUID(r["id"]): r["distance"] for r in results}
+        
+        # Return agents with their similarity scores, maintaining Qdrant's order
+        return [
+            (agent_dict[aid], distance_dict[aid])
+            for aid in agent_ids
+            if aid in agent_dict and aid in distance_dict
+        ]
 
     async def update_agent(self, agent: Agent) -> Agent:
         """Update agent."""

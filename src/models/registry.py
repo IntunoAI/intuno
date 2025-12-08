@@ -6,7 +6,6 @@ from uuid import UUID
 from sqlalchemy import ARRAY, Boolean, Column, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
 
 from .base import BaseModel
 
@@ -28,7 +27,7 @@ class Agent(BaseModel):
     tags: Column[List[str]] = Column(ARRAY(String), nullable=False, default=list)
     trust_verification: Column[str] = Column(String, nullable=False)
     is_active: Column[bool] = Column(Boolean, default=True, nullable=False)
-    embedding: Column[List[float]] = Column(Vector(1536), nullable=True)
+    qdrant_point_id: Column[UUID] = Column(PostgresUUID, nullable=True, index=True)
 
     # Relationships
     user = relationship("User", back_populates="agents")
@@ -39,7 +38,6 @@ class Agent(BaseModel):
     # Indexes for performance
     __table_args__ = (
         Index("idx_agents_tags", "tags", postgresql_using="gin"),
-        Index("idx_agents_embedding", "embedding", postgresql_using="ivfflat"),
     )
 
 
@@ -55,7 +53,7 @@ class Capability(BaseModel):
     input_schema: Column[Dict[str, Any]] = Column(JSONB, nullable=False)
     output_schema: Column[Dict[str, Any]] = Column(JSONB, nullable=False)
     auth_type: Column[str] = Column(String, nullable=False)
-    embedding: Column[List[float]] = Column(Vector(1536), nullable=True)
+    qdrant_point_id: Column[UUID] = Column(PostgresUUID, nullable=True, index=True)
 
     # Relationships
     agent = relationship("Agent", back_populates="capabilities")
@@ -63,7 +61,6 @@ class Capability(BaseModel):
     # Indexes for performance
     __table_args__ = (
         Index("idx_capabilities_agent_capability", "agent_id", "capability_id"),
-        Index("idx_capabilities_embedding", "embedding", postgresql_using="ivfflat"),
     )
 
 

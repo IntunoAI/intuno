@@ -1,6 +1,6 @@
 """Registry routes for agent management."""
 
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -24,17 +24,19 @@ router = APIRouter(prefix="/registry", tags=["Registry"])
 async def register_agent(
     agent_data: AgentCreate,
     current_user: User = Depends(get_current_user),
+    enhance_manifest: bool = Query(default=True, description="Whether to enhance manifest text with LLM"),
     registry_service: RegistryService = Depends(),
 ):
     """Register a new agent.
     :param agent_data: AgentCreate
     :param current_user: User
+    :param enhance_manifest: bool - Whether to enhance manifest text with LLM
     :param registry_service: RegistryService
     :return: AgentResponse
     """
     
     try:
-        agent = await registry_service.register_agent(agent_data.manifest, current_user.id)
+        agent = await registry_service.register_agent(agent_data.manifest, current_user.id, enhance_manifest=enhance_manifest)
         
         # Convert capabilities to response format
         capabilities = []
@@ -186,18 +188,20 @@ async def update_agent(
     agent_uuid: UUID,
     agent_data: AgentUpdate,
     current_user: User = Depends(get_current_user),
+    enhance_manifest: bool = Query(default=True, description="Whether to enhance manifest text with LLM"),
     registry_service: RegistryService = Depends(),
 ):
     """Update an agent (owner only).
     :param agent_uuid: UUID
     :param agent_data: AgentUpdate
     :param current_user: User
+    :param enhance_manifest: bool - Whether to enhance manifest text with LLM
     :param registry_service: RegistryService
     :return: AgentResponse
     """
     
     try:
-        agent = await registry_service.update_agent(agent_uuid, agent_data.manifest, current_user.id)
+        agent = await registry_service.update_agent(agent_uuid, agent_data.manifest, current_user.id, enhance_manifest=enhance_manifest)
         
         # Convert capabilities to response format
         capabilities = []
@@ -268,18 +272,32 @@ async def delete_agent(
 async def semantic_discover(
     query: str = Query(..., description="Natural language query for semantic search"),
     limit: int = Query(default=10, ge=1, le=50),
+    similarity_threshold: Optional[float] = Query(
+        default=None,
+        ge=0.0,
+        le=2.0,
+        description="Maximum cosine distance (0.0=same, 2.0=opposite). Lower values = more strict matching. None = no threshold (return all results ordered by similarity)."
+    ),
+    enhance_query: bool = Query(default=True, description="Whether to enhance query with LLM"),
     registry_service: RegistryService = Depends(),
 ):
     """
     Semantic discovery of agents using vector similarity.
-    :param query: str
-    :param limit: int
+    Returns agents ordered by similarity. If similarity_threshold is provided, only returns agents within the threshold.
+    :param query: str - Natural language query
+    :param limit: int - Maximum number of results
+    :param similarity_threshold: Optional[float] - Maximum cosine distance for matching (None = no threshold)
+    :param enhance_query: bool - Whether to enhance query with LLM
     :param registry_service: RegistryService
     :return: List[AgentListResponse]
     """
     
-    discover_query = DiscoverQuery(query=query, limit=limit)
-    agents = await registry_service.semantic_discover(discover_query)
+    discover_query = DiscoverQuery(
+        query=query,
+        limit=limit,
+        similarity_threshold=similarity_threshold
+    )
+    results = await registry_service.semantic_discover(discover_query, enhance_query=enhance_query)
     
     return [
         AgentListResponse(
@@ -292,8 +310,18 @@ async def semantic_discover(
             trust_verification=agent.trust_verification,
             is_active=agent.is_active,
             created_at=agent.created_at,
+            capabilities=[
+                {
+                    "id": cap.capability_id,
+                    "input_schema": cap.input_schema,
+                    "output_schema": cap.output_schema,
+                    "auth_type": {"type": cap.auth_type},
+                }
+                for cap in agent.capabilities
+            ],
+            similarity_score=score,
         )
-        for agent in agents
+        for agent, score in results
     ]
 
 
