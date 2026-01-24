@@ -39,7 +39,7 @@ class EmbeddingService:
                 enhanced_text = text
 
             response = await client.embeddings.create(
-                model="text-embedding-3-small",
+                model=settings.EMBEDDING_MODEL,
                 input=enhanced_text,
             )
             return response.data[0].embedding
@@ -82,7 +82,7 @@ class EmbeddingService:
         """
         try:
             response = await client.embeddings.create(
-                model="text-embedding-3-small",
+                model=settings.EMBEDDING_MODEL,
                 input=texts,
             )
             return [data.embedding for data in response.data]
@@ -102,12 +102,69 @@ class EmbeddingService:
 
     @staticmethod
     def prepare_capability_text_for_embedding(capability_id: str, input_schema: dict, output_schema: dict) -> str:
-        """Prepare capability text for embedding generation.
-        :param capability_id: str
-        :param input_schema: dict
-        :param output_schema: dict
-        :return: str
+        """Prepare capability text for embedding generation with enhanced schema extraction.
+        
+        Extracts property names, types, required fields, and descriptions from JSON schemas
+        to create a comprehensive text representation for embedding.
+        
+        :param capability_id: str - Capability identifier
+        :param input_schema: dict - JSON schema for input
+        :param output_schema: dict - JSON schema for output
+        :return: str - Enhanced text for embedding
         """
-        input_desc = input_schema.get("description", "")
-        output_desc = output_schema.get("description", "")
-        return f"Capability {capability_id}. Input: {input_desc}. Output: {output_desc}".strip()
+        parts = [f"Capability: {capability_id}"]
+        
+        # Extract input schema details
+        if input_schema:
+            input_desc = input_schema.get("description", "")
+            if input_desc:
+                parts.append(f"Input description: {input_desc}")
+            
+            props = input_schema.get("properties", {})
+            required = input_schema.get("required", [])
+            
+            if props:
+                prop_texts = []
+                for prop_name, prop_schema in props.items():
+                    prop_type = prop_schema.get("type", "any")
+                    is_required = prop_name in required
+                    prop_desc = prop_schema.get("description", "")
+                    req_marker = "required" if is_required else "optional"
+                    
+                    prop_text = f"{prop_name} ({prop_type}, {req_marker})"
+                    if prop_desc:
+                        prop_text += f": {prop_desc}"
+                    
+                    # Add enum values if present
+                    if "enum" in prop_schema:
+                        enum_values = ", ".join(str(v) for v in prop_schema["enum"])
+                        prop_text += f" [options: {enum_values}]"
+                    
+                    prop_texts.append(prop_text)
+                
+                if prop_texts:
+                    parts.append(f"Input parameters: {', '.join(prop_texts)}")
+        
+        # Extract output schema details
+        if output_schema:
+            output_desc = output_schema.get("description", "")
+            if output_desc:
+                parts.append(f"Output description: {output_desc}")
+            
+            props = output_schema.get("properties", {})
+            if props:
+                prop_texts = []
+                for prop_name, prop_schema in props.items():
+                    prop_type = prop_schema.get("type", "any")
+                    prop_desc = prop_schema.get("description", "")
+                    
+                    prop_text = f"{prop_name} ({prop_type})"
+                    if prop_desc:
+                        prop_text += f": {prop_desc}"
+                    
+                    prop_texts.append(prop_text)
+                
+                if prop_texts:
+                    parts.append(f"Output: {', '.join(prop_texts)}")
+        
+        return ". ".join(parts)

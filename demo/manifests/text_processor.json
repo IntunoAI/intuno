@@ -1,0 +1,98 @@
+{
+  "agent_id": "agent:demo:text-processor:1.0.0",
+  "name": "Text Processor Agent",
+  "description": "A text processing agent that can convert text to uppercase, lowercase, and reverse strings",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8002/invoke"
+  },
+  "capabilities": [
+    {
+      "id": "uppercase",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to convert"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "string"
+          }
+        }
+      },
+      "auth_type": {
+        "type": "public"
+      }
+    },
+    {
+      "id": "lowercase",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to convert"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "string"
+          }
+        }
+      },
+      "auth_type": {
+        "type": "public"
+      }
+    },
+    {
+      "id": "reverse",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to reverse"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "string"
+          }
+        }
+      },
+      "auth_type": {
+        "type": "public"
+      }
+    }
+  ],
+  "tags": [
+    "text",
+    "processing",
+    "string",
+    "nlp"
+  ],
+  "trust": {
+    "verification": "self-signed"
+  }
+}

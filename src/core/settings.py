@@ -26,8 +26,12 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str = ""
 
     # LLM Enhancement Configuration
-    ENABLE_LLM_ENHANCEMENT: bool = True
+    ENABLE_LLM_ENHANCEMENT: bool = False  # Default to False for cost/latency reasons
     LLM_ENHANCEMENT_MODEL: str = "gpt-4o-mini"
+    
+    # Embedding Configuration
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_VERSION: str = "1.0"  # Version of embedding structure/format
 
     model_config = SettingsConfigDict(
         env_file=".env",

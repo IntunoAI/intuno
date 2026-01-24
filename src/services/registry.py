@@ -82,31 +82,66 @@ class RegistryService:
                 "agent_id": manifest.agent_id,
                 "is_active": True,
                 "name": manifest.name,
+                "embedding_version": settings.EMBEDDING_VERSION,
             },
         )
 
-        # Update agent with Qdrant point ID
+        # Update agent with Qdrant point ID and embedding version
         created_agent.qdrant_point_id = qdrant_point_id
+        created_agent.embedding_version = settings.EMBEDDING_VERSION
         await self.registry_repository.update_agent(created_agent)
 
-        # Create capabilities
+        # Create capabilities and store their embeddings
         capabilities = []
         for cap_data in manifest.capabilities:
-            # Generate embedding for capability
+            # Generate enhanced embedding for capability
             cap_text = self.embedding_service.prepare_capability_text_for_embedding(
                 cap_data.id, cap_data.input_schema, cap_data.output_schema
             )
-            cap_embedding = await self.embedding_service.generate_embedding(cap_text)
+            cap_embedding = await self.embedding_service.generate_embedding(cap_text, enhance=False)
 
+            # Create capability first to get UUID
             capability = Capability(
                 agent_id=created_agent.id,
                 capability_id=cap_data.id,
                 input_schema=cap_data.input_schema,
                 output_schema=cap_data.output_schema,
                 auth_type=cap_data.auth_type.get("type", "public"),
-                qdrant_point_id=None,  # Can store capability embeddings in Qdrant if needed
+                qdrant_point_id=None,  # Will be set after creation
+                embedding_version=settings.EMBEDDING_VERSION,
             )
             capabilities.append(capability)
+        
+        # Add capabilities to database first to get their IDs
+        if capabilities:
+            await self.registry_repository.add_capabilities(capabilities)
+            
+            # Now store capability embeddings in Qdrant
+            for i, cap_data in enumerate(manifest.capabilities):
+                capability = capabilities[i]
+                cap_text = self.embedding_service.prepare_capability_text_for_embedding(
+                    cap_data.id, cap_data.input_schema, cap_data.output_schema
+                )
+                cap_embedding = await self.embedding_service.generate_embedding(cap_text, enhance=False)
+                
+                # Store capability embedding in Qdrant
+                capability_point_id = capability.id
+                await self.qdrant_service.upsert_capability_vector(
+                    point_id=capability_point_id,
+                    vector=cap_embedding,
+                    payload={
+                        "agent_id": manifest.agent_id,
+                        "agent_uuid": str(created_agent.id),
+                        "capability_id": cap_data.id,
+                        "agent_name": manifest.name,
+                        "is_active": True,
+                        "embedding_version": settings.EMBEDDING_VERSION,
+                    },
+                )
+                
+                # Update capability with Qdrant point ID
+                capability.qdrant_point_id = capability_point_id
+                await self.registry_repository.update_capability(capability)
 
         # Create requirements
         requirements = []
@@ -118,9 +153,7 @@ class RegistryService:
                 )
                 requirements.append(requirement)
 
-        # Add capabilities and requirements via repository
-        if capabilities:
-            await self.registry_repository.add_capabilities(capabilities)
+        # Add requirements via repository
         if requirements:
             await self.registry_repository.add_requirements(requirements)
 
@@ -219,7 +252,20 @@ class RegistryService:
             )
             agent_embedding = await self.embedding_service.generate_embedding(agent_text)
 
-        # Update embedding in Qdrant
+        # Delete old capability vectors from Qdrant before deleting capabilities
+        old_capabilities = await self.registry_repository.get_agent_capabilities(agent.id)
+        for old_cap in old_capabilities:
+            if old_cap.qdrant_point_id:
+                try:
+                    await self.qdrant_service.delete_capability_vector(old_cap.qdrant_point_id)
+                except Exception:
+                    pass  # Continue even if deletion fails
+        
+        # Update capabilities (delete old ones and create new ones)
+        await self.registry_repository.delete_agent_capabilities(agent.id)
+        await self.registry_repository.delete_agent_requirements(agent.id)
+
+        # Update embedding in Qdrant with version
         qdrant_point_id = agent.qdrant_point_id or agent.id
         await self.qdrant_service.upsert_vector(
             point_id=qdrant_point_id,
@@ -228,32 +274,56 @@ class RegistryService:
                 "agent_id": manifest.agent_id,
                 "is_active": agent.is_active,
                 "name": manifest.name,
+                "embedding_version": settings.EMBEDDING_VERSION,
             },
         )
         agent.qdrant_point_id = qdrant_point_id
-
-        # Update capabilities (delete old ones and create new ones)
-        # This is a simplified approach - in production you might want more sophisticated updates
-        await self.registry_repository.delete_agent_capabilities(agent.id)
-        await self.registry_repository.delete_agent_requirements(agent.id)
+        agent.embedding_version = settings.EMBEDDING_VERSION
 
         # Create new capabilities
         new_capabilities = []
         for cap_data in manifest.capabilities:
-            cap_text = self.embedding_service.prepare_capability_text_for_embedding(
-                cap_data.id, cap_data.input_schema, cap_data.output_schema
-            )
-            cap_embedding = await self.embedding_service.generate_embedding(cap_text)
-
             capability = Capability(
                 agent_id=agent.id,
                 capability_id=cap_data.id,
                 input_schema=cap_data.input_schema,
                 output_schema=cap_data.output_schema,
                 auth_type=cap_data.auth_type.get("type", "public"),
-                qdrant_point_id=None,  # Can store capability embeddings in Qdrant if needed
+                qdrant_point_id=None,  # Will be set after creation
+                embedding_version=settings.EMBEDDING_VERSION,
             )
             new_capabilities.append(capability)
+        
+        # Add capabilities to database first
+        if new_capabilities:
+            await self.registry_repository.add_capabilities(new_capabilities)
+            
+            # Store capability embeddings in Qdrant
+            for i, cap_data in enumerate(manifest.capabilities):
+                capability = new_capabilities[i]
+                cap_text = self.embedding_service.prepare_capability_text_for_embedding(
+                    cap_data.id, cap_data.input_schema, cap_data.output_schema
+                )
+                cap_embedding = await self.embedding_service.generate_embedding(cap_text, enhance=False)
+                
+                # Store capability embedding in Qdrant
+                capability_point_id = capability.id
+                await self.qdrant_service.upsert_capability_vector(
+                    point_id=capability_point_id,
+                    vector=cap_embedding,
+                    payload={
+                        "agent_id": manifest.agent_id,
+                        "agent_uuid": str(agent.id),
+                        "capability_id": cap_data.id,
+                        "agent_name": manifest.name,
+                        "is_active": agent.is_active,
+                        "embedding_version": settings.EMBEDDING_VERSION,
+                    },
+                )
+                
+                # Update capability with Qdrant point ID
+                capability.qdrant_point_id = capability_point_id
+                await self.registry_repository.update_capability(capability)
 
         # Create new requirements
         new_requirements = []
@@ -265,9 +335,7 @@ class RegistryService:
                 )
                 new_requirements.append(requirement)
 
-        # Add new capabilities and requirements via repository
-        if new_capabilities:
-            await self.registry_repository.add_capabilities(new_capabilities)
+        # Add new requirements via repository
         if new_requirements:
             await self.registry_repository.add_requirements(new_requirements)
 
@@ -287,6 +355,15 @@ class RegistryService:
         if agent.user_id != user_id:
             raise ValueError("Not authorized to delete this agent")
 
+        # Delete capability vectors from Qdrant first
+        capabilities = await self.registry_repository.get_agent_capabilities(agent_uuid)
+        for cap in capabilities:
+            if cap.qdrant_point_id:
+                try:
+                    await self.qdrant_service.delete_capability_vector(cap.qdrant_point_id)
+                except Exception:
+                    pass  # Continue even if deletion fails
+        
         # Delete from Qdrant if point ID exists
         if agent.qdrant_point_id:
             try:

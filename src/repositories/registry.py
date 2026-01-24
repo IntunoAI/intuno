@@ -1,6 +1,6 @@
 """Registry domain repository."""
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy import select, text
@@ -102,6 +102,7 @@ class RegistryRepository:
     ) -> List[Tuple[Agent, float]]:
         """
         Semantic discovery using vector similarity with Qdrant.
+        Searches capabilities first for better precision, then aggregates to agents.
         Uses cosine distance to find the most similar agents.
         If similarity_threshold is provided, only returns agents below the threshold.
         :param embedding: List[float] - Query embedding vector
@@ -113,20 +114,69 @@ class RegistryRepository:
         
         qdrant_service = QdrantService()
         
-        # Search Qdrant for similar vectors
-        # Filter for active agents only
-        results = await qdrant_service.search_similar(
+        # Search capabilities first for better precision
+        # Use a higher limit to get more capability matches, then aggregate to agents
+        capability_results = await qdrant_service.search_capabilities(
             query_vector=embedding,
-            limit=limit,
+            limit=limit * 3,  # Get more capability matches to aggregate
             similarity_threshold=similarity_threshold,
             filter_conditions={"is_active": True},
         )
         
-        if not results:
+        if not capability_results:
+            # Fallback to agent-level search if no capability matches
+            agent_results = await qdrant_service.search_similar(
+                query_vector=embedding,
+                limit=limit,
+                similarity_threshold=similarity_threshold,
+                filter_conditions={"is_active": True},
+            )
+            
+            if not agent_results:
+                return []
+            
+            agent_ids = [UUID(r["id"]) for r in agent_results]
+            query = (
+                select(Agent)
+                .options(selectinload(Agent.capabilities))
+                .where(Agent.id.in_(agent_ids))
+            )
+            result = await self.session.execute(query)
+            agents = list(result.scalars().all())
+            agent_dict = {agent.id: agent for agent in agents}
+            distance_dict = {UUID(r["id"]): r["distance"] for r in agent_results}
+            
+            return [
+                (agent_dict[aid], distance_dict[aid])
+                for aid in agent_ids
+                if aid in agent_dict and aid in distance_dict
+            ]
+        
+        # Aggregate capability results to agents
+        # Group by agent_uuid and take the best (lowest distance) match per agent
+        agent_scores: Dict[UUID, float] = {}  # agent_id -> best_distance
+        
+        for cap_result in capability_results:
+            agent_uuid_str = cap_result["payload"].get("agent_uuid")
+            if not agent_uuid_str:
+                continue
+            
+            try:
+                agent_uuid = UUID(agent_uuid_str)
+                distance = cap_result["distance"]
+                
+                # Keep the best (lowest distance) match for each agent
+                if agent_uuid not in agent_scores or distance < agent_scores[agent_uuid]:
+                    agent_scores[agent_uuid] = distance
+            except (ValueError, TypeError):
+                continue
+        
+        if not agent_scores:
             return []
         
-        # Extract agent IDs from Qdrant results
-        agent_ids = [UUID(result["id"]) for result in results]
+        # Sort agents by distance and limit results
+        sorted_agents = sorted(agent_scores.items(), key=lambda x: x[1])[:limit]
+        agent_ids = [aid for aid, _ in sorted_agents]
         
         # Fetch full Agent objects from PostgreSQL
         query = (
@@ -141,14 +191,11 @@ class RegistryRepository:
         # Create a mapping of agent ID to agent
         agent_dict = {agent.id: agent for agent in agents}
         
-        # Create a mapping of agent ID to distance from Qdrant results
-        distance_dict = {UUID(r["id"]): r["distance"] for r in results}
-        
-        # Return agents with their similarity scores, maintaining Qdrant's order
+        # Return agents with their similarity scores, maintaining sorted order
         return [
-            (agent_dict[aid], distance_dict[aid])
-            for aid in agent_ids
-            if aid in agent_dict and aid in distance_dict
+            (agent_dict[aid], agent_scores[aid])
+            for aid, _ in sorted_agents
+            if aid in agent_dict
         ]
 
     async def update_agent(self, agent: Agent) -> Agent:
@@ -156,6 +203,12 @@ class RegistryRepository:
         await self.session.commit()
         await self.session.refresh(agent)
         return agent
+    
+    async def update_capability(self, capability: Capability) -> Capability:
+        """Update capability."""
+        await self.session.commit()
+        await self.session.refresh(capability)
+        return capability
 
     async def delete_agent(self, agent_id: UUID) -> bool:
         """Delete agent by ID."""
@@ -185,6 +238,16 @@ class RegistryRepository:
             self.session.add(requirement)
         await self.session.commit()
 
+    async def get_agent_capabilities(self, agent_id: UUID) -> List[Capability]:
+        """Get all capabilities for an agent.
+        :param agent_id: UUID
+        :return: List[Capability]
+        """
+        result = await self.session.execute(
+            select(Capability).where(Capability.agent_id == agent_id)
+        )
+        return list(result.scalars().all())
+    
     async def delete_agent_capabilities(self, agent_id: UUID) -> None:
         """Delete all capabilities for an agent.
         :param agent_id: UUID

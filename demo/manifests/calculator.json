@@ -1,0 +1,112 @@
+{
+  "agent_id": "agent:demo:calculator:1.0.0",
+  "name": "Calculator Agent",
+  "description": "A simple calculator agent that performs basic mathematical operations like addition, subtraction, and multiplication",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8001/invoke"
+  },
+  "capabilities": [
+    {
+      "id": "add",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "type": "number",
+            "description": "First number"
+          },
+          "b": {
+            "type": "number",
+            "description": "Second number"
+          }
+        },
+        "required": [
+          "a",
+          "b"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "number"
+          }
+        }
+      },
+      "auth_type": {
+        "type": "public"
+      }
+    },
+    {
+      "id": "subtract",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "type": "number",
+            "description": "First number"
+          },
+          "b": {
+            "type": "number",
+            "description": "Second number"
+          }
+        },
+        "required": [
+          "a",
+          "b"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "number"
+          }
+        }
+      },
+      "auth_type": {
+        "type": "public"
+      }
+    },
+    {
+      "id": "multiply",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "type": "number",
+            "description": "First number"
+          },
+          "b": {
+            "type": "number",
+            "description": "Second number"
+          }
+        },
+        "required": [
+          "a",
+          "b"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "number"
+          }
+        }
+      },
+      "auth_type": {
+        "type": "public"
+      }
+    }
+  ],
+  "tags": [
+    "math",
+    "calculator",
+    "arithmetic"
+  ],
+  "trust": {
+    "verification": "self-signed"
+  }
+}

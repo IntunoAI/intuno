@@ -28,6 +28,7 @@ class Agent(BaseModel):
     trust_verification: Column[str] = Column(String, nullable=False)
     is_active: Column[bool] = Column(Boolean, default=True, nullable=False)
     qdrant_point_id: Column[UUID] = Column(PostgresUUID, nullable=True, index=True)
+    embedding_version: Column[str] = Column(String, nullable=False, default="1.0", server_default="1.0")
 
     # Relationships
     user = relationship("User", back_populates="agents")
@@ -54,6 +55,7 @@ class Capability(BaseModel):
     output_schema: Column[Dict[str, Any]] = Column(JSONB, nullable=False)
     auth_type: Column[str] = Column(String, nullable=False)
     qdrant_point_id: Column[UUID] = Column(PostgresUUID, nullable=True, index=True)
+    embedding_version: Column[str] = Column(String, nullable=False, default="1.0", server_default="1.0")
 
     # Relationships
     agent = relationship("Agent", back_populates="capabilities")

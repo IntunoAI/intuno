@@ -20,7 +20,8 @@ from src.core.settings import settings
 class QdrantService:
     """Service for managing Qdrant vector database operations."""
 
-    COLLECTION_NAME = "agents"
+    AGENTS_COLLECTION = "agents"
+    CAPABILITIES_COLLECTION = "capabilities"
     VECTOR_SIZE = 1536  # OpenAI text-embedding-3-small dimension
 
     def __init__(self):
@@ -29,40 +30,57 @@ class QdrantService:
             url=settings.QDRANT_URL,
             api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None,
         )
-        self._collection_initialized = False
+        self._agents_collection_initialized = False
+        self._capabilities_collection_initialized = False
 
-    async def ensure_collection(self) -> None:
-        """Ensure the collection exists and is properly configured."""
-        if self._collection_initialized:
+    async def ensure_collection(self, collection_name: str = None) -> None:
+        """Ensure the agents collection exists and is properly configured.
+        
+        :param collection_name: Optional collection name (defaults to AGENTS_COLLECTION)
+        """
+        if collection_name is None:
+            collection_name = self.AGENTS_COLLECTION
+        
+        if collection_name == self.AGENTS_COLLECTION and self._agents_collection_initialized:
+            return
+        if collection_name == self.CAPABILITIES_COLLECTION and self._capabilities_collection_initialized:
             return
 
         collections = await self.client.get_collections()
         collection_names = [col.name for col in collections.collections]
 
-        if self.COLLECTION_NAME not in collection_names:
+        if collection_name not in collection_names:
             await self.client.create_collection(
-                collection_name=self.COLLECTION_NAME,
+                collection_name=collection_name,
                 vectors_config=VectorParams(
                     size=self.VECTOR_SIZE,
                     distance=Distance.COSINE,
                 ),
             )
 
-        self._collection_initialized = True
+        if collection_name == self.AGENTS_COLLECTION:
+            self._agents_collection_initialized = True
+        elif collection_name == self.CAPABILITIES_COLLECTION:
+            self._capabilities_collection_initialized = True
 
     async def upsert_vector(
         self,
         point_id: UUID,
         vector: List[float],
         payload: Dict[str, Any],
+        collection_name: str = None,
     ) -> None:
         """Upsert a vector with metadata into Qdrant.
         
         :param point_id: Unique point ID (typically agent UUID)
         :param vector: Embedding vector (1536 dimensions)
         :param payload: Metadata payload (agent_id, is_active, etc.)
+        :param collection_name: Collection name (defaults to AGENTS_COLLECTION)
         """
-        await self.ensure_collection()
+        if collection_name is None:
+            collection_name = self.AGENTS_COLLECTION
+        
+        await self.ensure_collection(collection_name)
 
         point = PointStruct(
             id=str(point_id),
@@ -71,7 +89,7 @@ class QdrantService:
         )
 
         await self.client.upsert(
-            collection_name=self.COLLECTION_NAME,
+            collection_name=collection_name,
             points=[point],
         )
 
@@ -81,6 +99,7 @@ class QdrantService:
         limit: int = 10,
         similarity_threshold: Optional[float] = None,
         filter_conditions: Optional[Dict[str, Any]] = None,
+        collection_name: str = None,
     ) -> List[Dict[str, Any]]:
         """Search for similar vectors in Qdrant.
         
@@ -88,9 +107,13 @@ class QdrantService:
         :param limit: Maximum number of results
         :param similarity_threshold: Maximum distance (0.0-2.0 for cosine)
         :param filter_conditions: Optional filter conditions (e.g., {"is_active": True})
+        :param collection_name: Collection name (defaults to AGENTS_COLLECTION)
         :return: List of results with id, score, and payload
         """
-        await self.ensure_collection()
+        if collection_name is None:
+            collection_name = self.AGENTS_COLLECTION
+        
+        await self.ensure_collection(collection_name)
 
         # Build filter if conditions provided
         qdrant_filter = None
@@ -121,7 +144,7 @@ class QdrantService:
             search_params.score_threshold = score_threshold
 
         results = await self.client.search(
-            collection_name=self.COLLECTION_NAME,
+            collection_name=collection_name,
             query_vector=query_vector,
             limit=limit,
             query_filter=qdrant_filter,
@@ -139,27 +162,35 @@ class QdrantService:
             for result in results
         ]
 
-    async def delete_vector(self, point_id: UUID) -> None:
+    async def delete_vector(self, point_id: UUID, collection_name: str = None) -> None:
         """Delete a vector from Qdrant.
         
         :param point_id: Point ID to delete
+        :param collection_name: Collection name (defaults to AGENTS_COLLECTION)
         """
-        await self.ensure_collection()
+        if collection_name is None:
+            collection_name = self.AGENTS_COLLECTION
+        
+        await self.ensure_collection(collection_name)
         await self.client.delete(
-            collection_name=self.COLLECTION_NAME,
+            collection_name=collection_name,
             points_selector=[str(point_id)],
         )
 
-    async def get_vector(self, point_id: UUID) -> Optional[Dict[str, Any]]:
+    async def get_vector(self, point_id: UUID, collection_name: str = None) -> Optional[Dict[str, Any]]:
         """Get a vector and its payload by point ID.
         
         :param point_id: Point ID to retrieve
+        :param collection_name: Collection name (defaults to AGENTS_COLLECTION)
         :return: Vector data with payload or None if not found
         """
-        await self.ensure_collection()
+        if collection_name is None:
+            collection_name = self.AGENTS_COLLECTION
+        
+        await self.ensure_collection(collection_name)
         
         result = await self.client.retrieve(
-            collection_name=self.COLLECTION_NAME,
+            collection_name=collection_name,
             ids=[str(point_id)],
             with_payload=True,
             with_vectors=True,
@@ -173,4 +204,53 @@ class QdrantService:
                 "payload": point.payload,
             }
         return None
+    
+    async def upsert_capability_vector(
+        self,
+        point_id: UUID,
+        vector: List[float],
+        payload: Dict[str, Any],
+    ) -> None:
+        """Upsert a capability vector with metadata into Qdrant.
+        
+        :param point_id: Unique point ID (typically capability UUID)
+        :param vector: Embedding vector (1536 dimensions)
+        :param payload: Metadata payload (agent_id, capability_id, is_active, etc.)
+        """
+        await self.upsert_vector(
+            point_id=point_id,
+            vector=vector,
+            payload=payload,
+            collection_name=self.CAPABILITIES_COLLECTION,
+        )
+    
+    async def search_capabilities(
+        self,
+        query_vector: List[float],
+        limit: int = 10,
+        similarity_threshold: Optional[float] = None,
+        filter_conditions: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search for similar capability vectors in Qdrant.
+        
+        :param query_vector: Query embedding vector
+        :param limit: Maximum number of results
+        :param similarity_threshold: Maximum distance (0.0-2.0 for cosine)
+        :param filter_conditions: Optional filter conditions (e.g., {"is_active": True})
+        :return: List of results with id, score, and payload
+        """
+        return await self.search_similar(
+            query_vector=query_vector,
+            limit=limit,
+            similarity_threshold=similarity_threshold,
+            filter_conditions=filter_conditions,
+            collection_name=self.CAPABILITIES_COLLECTION,
+        )
+    
+    async def delete_capability_vector(self, point_id: UUID) -> None:
+        """Delete a capability vector from Qdrant.
+        
+        :param point_id: Point ID to delete
+        """
+        await self.delete_vector(point_id, collection_name=self.CAPABILITIES_COLLECTION)
 

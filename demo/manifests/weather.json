@@ -1,0 +1,57 @@
+{
+  "agent_id": "agent:demo:weather:1.0.0",
+  "name": "Weather Agent",
+  "description": "A weather agent that provides weather information for cities",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8003/invoke"
+  },
+  "capabilities": [
+    {
+      "id": "get_weather",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "City name"
+          }
+        },
+        "required": [
+          "city"
+        ]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string"
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "condition": {
+            "type": "string"
+          },
+          "humidity": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          }
+        }
+      },
+      "auth_type": {
+        "type": "public"
+      }
+    }
+  ],
+  "tags": [
+    "weather",
+    "forecast",
+    "city"
+  ],
+  "trust": {
+    "verification": "self-signed"
+  }
+}
