@@ -8,6 +8,7 @@ from src.services.integration import IntegrationService
 from src.services.invocation_log import InvocationLogService
 from src.services.message import MessageService
 from src.services.registry import RegistryService
+from src.services.task import TaskService
 
 __all__ = [
     "AuthService",
@@ -18,4 +19,5 @@ __all__ = [
     "InvocationLogService",
     "MessageService",
     "RegistryService",
+    "TaskService",
 ]

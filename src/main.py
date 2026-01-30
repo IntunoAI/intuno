@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from agents.routes.agent_config import router as agent_config_router
 from src.core.settings import settings
 from src.routes.auth import router as auth_router
 from src.routes.brand import router as brand_router
@@ -11,6 +12,7 @@ from src.routes.integration import router as integration_router
 from src.routes.invocation_log import router as invocation_log_router
 from src.routes.message import router as message_router
 from src.routes.registry import router as registry_router
+from src.routes.task import router as task_router
 
 app = FastAPI(
     title="Intuno",
@@ -37,3 +39,5 @@ app.include_router(broker_router)
 app.include_router(conversation_router)
 app.include_router(message_router)
 app.include_router(invocation_log_router)
+app.include_router(task_router)
+app.include_router(agent_config_router)

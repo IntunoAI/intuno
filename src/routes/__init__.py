@@ -9,6 +9,7 @@ from src.routes.integration import router as integration_router
 from src.routes.invocation_log import router as invocation_log_router
 from src.routes.message import router as message_router
 from src.routes.registry import router as registry_router
+from src.routes.task import router as task_router
 
 __all__ = [
     "auth_router",
@@ -20,4 +21,5 @@ __all__ = [
     "invocation_log_router",
     "message_router",
     "registry_router",
+    "task_router",
 ]

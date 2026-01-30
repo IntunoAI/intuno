@@ -29,6 +29,7 @@ class User(BaseModel):
     brands = relationship("Brand", back_populates="owner", cascade="all, delete-orphan")
     integrations = relationship("Integration", back_populates="user", cascade="all, delete-orphan")
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
+    tasks = relationship("Task", back_populates="user", cascade="all, delete-orphan")
     invocation_logs = relationship("InvocationLog", foreign_keys="InvocationLog.caller_user_id", overlaps="caller_user")
 
 

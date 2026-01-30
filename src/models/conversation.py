@@ -33,3 +33,4 @@ class Conversation(BaseModel):
         order_by="Message.created_at",
     )
     invocation_logs = relationship("InvocationLog", back_populates="conversation")
+    tasks = relationship("Task", back_populates="conversation", cascade="all, delete-orphan")

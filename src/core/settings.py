@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +37,13 @@ class Settings(BaseSettings):
 
     # Brand verification (email code expiry; provider config added later)
     BRAND_VERIFICATION_CODE_EXPIRY_MINUTES: int = 15
+
+    # Task (orchestrator) timeout – global task-level timeout in seconds
+    TASK_TIMEOUT_SECONDS: int = 60
+
+    # Orchestrator fallback: when discovery returns no candidates, use this agent (and optionally capability)
+    ORCHESTRATOR_FALLBACK_AGENT_ID: Optional[str] = None
+    ORCHESTRATOR_FALLBACK_CAPABILITY_ID: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -25,3 +25,4 @@ class Message(BaseModel):
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")
     invocation_logs = relationship("InvocationLog", back_populates="message")
+    tasks = relationship("Task", back_populates="message", cascade="all, delete-orphan")

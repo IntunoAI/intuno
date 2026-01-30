@@ -38,3 +38,4 @@ class Integration(BaseModel):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    tasks = relationship("Task", back_populates="integration", cascade="all, delete-orphan")

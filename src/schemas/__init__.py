@@ -35,6 +35,12 @@ from src.schemas.message import (
     MessageResponse,
     MessageUpdate,
 )
+from src.schemas.task import (
+    StepSchema,
+    TaskCreate,
+    TaskListResponse,
+    TaskResponse,
+)
 from src.schemas.registry import (
     AgentCreate,
     AgentListResponse,
@@ -83,6 +89,11 @@ __all__ = [
     "MessageListResponse",
     "MessageResponse",
     "MessageUpdate",
+    # Task
+    "StepSchema",
+    "TaskCreate",
+    "TaskListResponse",
+    "TaskResponse",
     # Registry
     "AgentCreate",
     "AgentListResponse",

@@ -230,6 +230,67 @@ class RegistryRepository:
             if aid in agent_dict
         ]
 
+    async def semantic_discover_with_capability(
+        self,
+        embedding: List[float],
+        limit: int = 10,
+        similarity_threshold: Optional[float] = None,
+    ) -> List[Tuple[Agent, str, float]]:
+        """
+        Semantic discovery at capability level: returns (Agent, capability_id, distance)
+        for each match, ordered by similarity. Used by orchestrator executor to select
+        agent + capability per step.
+        :param embedding: List[float] - Query embedding vector
+        :param limit: int - Maximum number of results
+        :param similarity_threshold: Optional[float] - Maximum cosine distance. None = no threshold.
+        :return: List[tuple[Agent, str, float]] - (Agent, capability_id, distance) ordered by distance
+        """
+        from src.utilities.qdrant_service import QdrantService
+
+        qdrant_service = QdrantService()
+        capability_results = await qdrant_service.search_capabilities(
+            query_vector=embedding,
+            limit=limit,
+            similarity_threshold=similarity_threshold,
+            filter_conditions={"is_active": True},
+        )
+        if not capability_results:
+            return []
+
+        # Build (agent_uuid, capability_id, distance) preserving order
+        cap_tuples: List[Tuple[UUID, str, float]] = []
+        for cap_result in capability_results:
+            payload = cap_result.get("payload") or {}
+            agent_uuid_str = payload.get("agent_uuid")
+            capability_id = payload.get("capability_id")
+            if not agent_uuid_str or not capability_id:
+                continue
+            try:
+                agent_uuid = UUID(agent_uuid_str)
+                distance = cap_result["distance"]
+                cap_tuples.append((agent_uuid, capability_id, distance))
+            except (ValueError, TypeError):
+                continue
+        if not cap_tuples:
+            return []
+
+        # Load all unique agents
+        agent_ids = list({au for au, _, _ in cap_tuples})
+        query = (
+            select(Agent)
+            .options(selectinload(Agent.capabilities))
+            .where(Agent.id.in_(agent_ids))
+        )
+        result = await self.session.execute(query)
+        agents = list(result.scalars().all())
+        agent_dict = {a.id: a for a in agents}
+
+        return [
+            (agent_dict[au], cap_id, dist)
+            for au, cap_id, dist in cap_tuples
+            if au in agent_dict
+        ]
+
     async def update_agent(self, agent: Agent) -> Agent:
         """Update agent."""
         await self.session.commit()

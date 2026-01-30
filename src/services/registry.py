@@ -255,6 +255,29 @@ class RegistryService:
         scored.sort(key=lambda x: x[2], reverse=True)
         return [(agent, distance) for agent, distance, _ in scored]
 
+    async def semantic_discover_with_capability(
+        self,
+        query: DiscoverQuery,
+        enhance_query: bool = True,
+    ) -> List[Tuple[Agent, str, float]]:
+        """
+        Semantic discovery at capability level: returns (Agent, capability_id, distance)
+        for each match. Used by orchestrator executor to select agent + capability per step.
+        :param query: DiscoverQuery (query text, limit, similarity_threshold)
+        :param enhance_query: Whether to enhance query with LLM
+        :return: List[Tuple[Agent, str, float]] - (Agent, capability_id, distance) ordered by similarity
+        """
+        if enhance_query:
+            enhanced_query_text = await self.semantic_enhancement.enhance_discovery_query(query.query)
+        else:
+            enhanced_query_text = query.query
+        query_embedding = await self.embedding_service.generate_embedding(enhanced_query_text, enhance=False)
+        return await self.registry_repository.semantic_discover_with_capability(
+            embedding=query_embedding,
+            limit=query.limit,
+            similarity_threshold=query.similarity_threshold,
+        )
+
     async def get_agent(self, agent_id: str) -> Optional[Agent]:
         """
         Get agent by agent_id.
