@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import Depends
 
+from src.repositories.brand import BrandRepository
 from src.models.registry import Agent, AgentRating, Capability, AgentRequirement
 from src.repositories.broker import BrokerRepository
 from src.repositories.registry import RegistryRepository
@@ -24,24 +25,39 @@ class RegistryService:
         registry_repository: RegistryRepository = Depends(),
         broker_repository: BrokerRepository = Depends(),
         embedding_service: EmbeddingService = Depends(),
+        brand_repository: BrandRepository = Depends(),
     ):
         self.registry_repository = registry_repository
         self.broker_repository = broker_repository
         self.embedding_service = embedding_service
+        self.brand_repository = brand_repository
         self.qdrant_service = QdrantService()
         self.semantic_enhancement = SemanticEnhancementService(
             enabled=settings.ENABLE_LLM_ENHANCEMENT,
             model=settings.LLM_ENHANCEMENT_MODEL,
         )
 
-    async def register_agent(self, manifest: AgentManifest, user_id: UUID, enhance_manifest: bool = True) -> Agent:
+    async def register_agent(
+        self,
+        manifest: AgentManifest,
+        user_id: UUID,
+        enhance_manifest: bool = True,
+        brand_id: Optional[UUID] = None,
+    ) -> Agent:
         """
         Register a new agent.
         :param manifest: AgentManifest
         :param user_id: UUID
         :param enhance_manifest: Whether to enhance manifest text with LLM
+        :param brand_id: Optional brand to publish under; user must own the brand
         :return: Agent
         """
+        # If brand_id provided, ensure user owns the brand
+        if brand_id is not None:
+            brand = await self.brand_repository.get_by_id(brand_id)
+            if not brand or brand.owner_id != user_id:
+                raise ValueError("Brand not found or you are not the owner")
+
         # Check if agent_id already exists
         existing_agent = await self.registry_repository.get_agent_by_agent_id(manifest.agent_id)
         if existing_agent:
@@ -65,6 +81,7 @@ class RegistryService:
         agent = Agent(
             agent_id=manifest.agent_id,
             user_id=user_id,
+            brand_id=brand_id,
             name=manifest.name,
             description=manifest.description,
             version=manifest.version,
@@ -254,21 +271,41 @@ class RegistryService:
         """
         return await self.registry_repository.get_agent_by_id(agent_uuid)
 
-    async def update_agent(self, agent_uuid: UUID, manifest: AgentManifest, user_id: UUID, enhance_manifest: bool = True) -> Agent:
+    async def update_agent(
+        self,
+        agent_uuid: UUID,
+        manifest: AgentManifest,
+        user_id: UUID,
+        enhance_manifest: bool = True,
+        brand_id: Optional[UUID] = None,
+    ) -> Agent:
         """
-        Update an agent (only if owned by user).
+        Update an agent (only if owned by user or brand owner).
         :param agent_uuid: UUID
         :param manifest: AgentManifest
         :param user_id: UUID
         :param enhance_manifest: Whether to enhance manifest text with LLM
+        :param brand_id: Optional brand to assign; user must own the brand
         :return: Agent
         """
         agent = await self.registry_repository.get_agent_by_id(agent_uuid)
         if not agent:
             raise ValueError("Agent not found")
-        
-        if agent.user_id != user_id:
+
+        # Authorization: publisher or brand owner
+        if agent.brand_id:
+            brand = await self.brand_repository.get_by_id(agent.brand_id)
+            if not brand or brand.owner_id != user_id:
+                raise ValueError("Not authorized to update this agent")
+        elif agent.user_id != user_id:
             raise ValueError("Not authorized to update this agent")
+
+        # If brand_id in request, validate ownership and set (None = leave unchanged)
+        if brand_id is not None:
+            brand = await self.brand_repository.get_by_id(brand_id)
+            if not brand or brand.owner_id != user_id:
+                raise ValueError("Brand not found or you are not the owner")
+            agent.brand_id = brand_id
 
         # Update agent fields
         agent.name = manifest.name
@@ -385,7 +422,7 @@ class RegistryService:
 
     async def delete_agent(self, agent_uuid: UUID, user_id: UUID) -> bool:
         """
-        Delete an agent (only if owned by user).
+        Delete an agent (only if owned by user or brand owner).
         :param agent_uuid: UUID
         :param user_id: UUID
         :return: bool
@@ -393,8 +430,12 @@ class RegistryService:
         agent = await self.registry_repository.get_agent_by_id(agent_uuid)
         if not agent:
             return False
-        
-        if agent.user_id != user_id:
+
+        if agent.brand_id:
+            brand = await self.brand_repository.get_by_id(agent.brand_id)
+            if not brand or brand.owner_id != user_id:
+                raise ValueError("Not authorized to delete this agent")
+        elif agent.user_id != user_id:
             raise ValueError("Not authorized to delete this agent")
 
         # Delete capability vectors from Qdrant first

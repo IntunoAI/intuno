@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_VERSION: str = "1.0"  # Version of embedding structure/format
 
+    # Brand verification (email code expiry; provider config added later)
+    BRAND_VERIFICATION_CODE_EXPIRY_MINUTES: int = 15
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",  # Ignore extra environment variables

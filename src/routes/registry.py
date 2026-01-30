@@ -38,7 +38,12 @@ async def register_agent(
     """
     
     try:
-        agent = await registry_service.register_agent(agent_data.manifest, current_user.id, enhance_manifest=enhance_manifest)
+        agent = await registry_service.register_agent(
+            agent_data.manifest,
+            current_user.id,
+            enhance_manifest=enhance_manifest,
+            brand_id=agent_data.brand_id,
+        )
         
         # Convert capabilities to response format
         capabilities = []
@@ -442,7 +447,13 @@ async def update_agent(
     """
     
     try:
-        agent = await registry_service.update_agent(agent_uuid, agent_data.manifest, current_user.id, enhance_manifest=enhance_manifest)
+        agent = await registry_service.update_agent(
+            agent_uuid,
+            agent_data.manifest,
+            current_user.id,
+            enhance_manifest=enhance_manifest,
+            brand_id=agent_data.brand_id,
+        )
         
         # Convert capabilities to response format
         capabilities = []

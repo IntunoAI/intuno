@@ -137,11 +137,13 @@ class DiscoverQuery(BaseModel):
 
 class AgentCreate(BaseModel):
     """Agent creation schema."""
-    
+
     manifest: AgentManifest
+    brand_id: Optional[UUID] = None
 
 
 class AgentUpdate(BaseModel):
     """Agent update schema."""
-    
+
     manifest: AgentManifest
+    brand_id: Optional[UUID] = None

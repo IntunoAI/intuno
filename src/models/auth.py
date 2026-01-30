@@ -26,6 +26,7 @@ class User(BaseModel):
     # Relationships
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
     agents = relationship("Agent", back_populates="user", cascade="all, delete-orphan")
+    brands = relationship("Brand", back_populates="owner", cascade="all, delete-orphan")
     invocation_logs = relationship("InvocationLog", foreign_keys="InvocationLog.caller_user_id", overlaps="caller_user")
 
 

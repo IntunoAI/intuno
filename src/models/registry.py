@@ -49,6 +49,9 @@ class Agent(BaseModel):
     user_id: Column[UUID] = Column(
         PostgresUUID, ForeignKey("users.id"), nullable=False
     )
+    brand_id: Column[Optional[UUID]] = Column(
+        PostgresUUID, ForeignKey("brands.id"), nullable=True, index=True
+    )
     name: Column[str] = Column(String, nullable=False)
     description: Column[str] = Column(Text, nullable=False)
     version: Column[str] = Column(String, nullable=False)
@@ -63,6 +66,11 @@ class Agent(BaseModel):
 
     # Relationships
     user = relationship("User", back_populates="agents")
+    brand = relationship(
+        "Brand",
+        back_populates="agents",
+        foreign_keys=[brand_id],
+    )
     capabilities = relationship("Capability", back_populates="agent", cascade="all, delete-orphan")
     requirements = relationship("AgentRequirement", back_populates="agent", cascade="all, delete-orphan")
     invocation_logs = relationship("InvocationLog", back_populates="target_agent")
