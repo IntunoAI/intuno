@@ -20,13 +20,23 @@ from src.services.brand import BrandService
 router = APIRouter(prefix="/brands", tags=["Brands"])
 
 
-@router.post("", response_model=BrandResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=BrandResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_brand(
     data: BrandCreate,
     current_user: User = Depends(get_current_user),
     brand_service: BrandService = Depends(),
 ) -> BrandResponse:
-    """Create a new brand (claim brand)."""
+    """
+    Create a new brand (claim brand).
+    :param data: BrandCreate
+    :param current_user: User
+    :param brand_service: BrandService
+    :return: BrandResponse
+    """
     try:
         brand = await brand_service.create(current_user.id, data)
         return brand
@@ -34,23 +44,40 @@ async def create_brand(
         raise BadRequestException(str(e))
 
 
-@router.get("/me", response_model=List[BrandResponse])
+@router.get(
+    "/me",
+    response_model=List[BrandResponse],
+)
 async def list_my_brands(
     current_user: User = Depends(get_current_user),
     brand_service: BrandService = Depends(),
 ) -> List[BrandResponse]:
-    """List current user's brands."""
+    """
+    List current user's brands.
+    :param current_user: User
+    :param brand_service: BrandService
+    :return: List[BrandResponse]
+    """
     brands = await brand_service.list_by_owner(current_user.id)
     return brands
 
 
-@router.get("/{id_or_slug}", response_model=BrandResponse)
+@router.get(
+    "/{id_or_slug}",
+    response_model=BrandResponse,
+)
 async def get_brand(
     id_or_slug: str,
     current_user: User = Depends(get_current_user),
     brand_service: BrandService = Depends(),
 ) -> BrandResponse:
-    """Get brand by ID or slug."""
+    """
+    Get brand by ID or slug.
+    :param id_or_slug: str
+    :param current_user: User
+    :param brand_service: BrandService
+    :return: BrandResponse
+    """
     brand = await brand_service.get_by_id_or_slug(id_or_slug)
     if not brand:
         raise NotFoundException("Brand")
@@ -59,14 +86,24 @@ async def get_brand(
     return brand
 
 
-@router.put("/{brand_id}", response_model=BrandResponse)
+@router.put(
+    "/{brand_id}",
+    response_model=BrandResponse,
+)
 async def update_brand(
     brand_id: UUID,
     data: BrandUpdate,
     current_user: User = Depends(get_current_user),
     brand_service: BrandService = Depends(),
 ) -> BrandResponse:
-    """Update brand (wizard steps). Owner only."""
+    """
+    Update brand (wizard steps). Owner only.
+    :param brand_id: UUID
+    :param data: BrandUpdate
+    :param current_user: User
+    :param brand_service: BrandService
+    :return: BrandResponse
+    """
     brand = await brand_service.get_by_id(brand_id)
     if not brand:
         raise NotFoundException("Brand")
@@ -79,13 +116,22 @@ async def update_brand(
         raise BadRequestException(str(e))
 
 
-@router.post("/{brand_id}/resend-verification", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/{brand_id}/resend-verification",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def resend_verification(
     brand_id: UUID,
     current_user: User = Depends(get_current_user),
     brand_service: BrandService = Depends(),
 ) -> None:
-    """Send or resend verification code. Owner only. Rate-limited."""
+    """
+    Send or resend verification code. Owner only. Rate-limited.
+    :param brand_id: UUID
+    :param current_user: User
+    :param brand_service: BrandService
+    :return: None
+    """
     try:
         await brand_service.send_verification_code(brand_id, current_user.id)
     except ValueError as e:
@@ -94,14 +140,24 @@ async def resend_verification(
         raise
 
 
-@router.post("/{brand_id}/verify", response_model=VerifyBrandResponse)
+@router.post(
+    "/{brand_id}/verify",
+    response_model=VerifyBrandResponse,
+)
 async def verify_brand(
     brand_id: UUID,
     body: VerifyBrandRequest,
     current_user: User = Depends(get_current_user),
     brand_service: BrandService = Depends(),
 ) -> VerifyBrandResponse:
-    """Submit verification code. Owner only."""
+    """
+    Submit verification code. Owner only.
+    :param brand_id: UUID
+    :param body: VerifyBrandRequest
+    :param current_user: User
+    :param brand_service: BrandService
+    :return: VerifyBrandResponse
+    """
     try:
         brand = await brand_service.verify_code(
             brand_id, body.code, current_user.id

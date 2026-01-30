@@ -29,7 +29,12 @@ class BrandService:
         self.brand_repository = brand_repository
 
     async def create(self, owner_id: UUID, data: BrandCreate) -> Brand:
-        """Create a new brand."""
+        """
+        Create a new brand.
+        :param owner_id: UUID
+        :param data: BrandCreate
+        :return: Brand
+        """
         existing = await self.brand_repository.get_by_slug(data.slug)
         if existing:
             raise ValueError(f"Brand with slug '{data.slug}' already exists")
@@ -47,15 +52,27 @@ class BrandService:
         return await self.brand_repository.create(brand)
 
     async def get_by_id(self, brand_id: UUID) -> Optional[Brand]:
-        """Get brand by ID."""
+        """
+        Get brand by ID.
+        :param brand_id: UUID
+        :return: Optional[Brand]
+        """
         return await self.brand_repository.get_by_id(brand_id)
 
     async def get_by_slug(self, slug: str) -> Optional[Brand]:
-        """Get brand by slug."""
+        """
+        Get brand by slug.
+        :param slug: str
+        :return: Optional[Brand]
+        """
         return await self.brand_repository.get_by_slug(slug)
 
     async def get_by_id_or_slug(self, id_or_slug: str) -> Optional[Brand]:
-        """Get brand by UUID string or slug."""
+        """
+        Get brand by UUID string or slug.
+        :param id_or_slug: str
+        :return: Optional[Brand]
+        """
         try:
             uid = UUID(id_or_slug)
             return await self.brand_repository.get_by_id(uid)
@@ -63,11 +80,20 @@ class BrandService:
             return await self.brand_repository.get_by_slug(id_or_slug)
 
     async def list_by_owner(self, owner_id: UUID) -> List[Brand]:
-        """List brands owned by user."""
+        """
+        List brands owned by user.
+        :param owner_id: UUID
+        :return: List[Brand]
+        """
         return await self.brand_repository.get_by_owner_id(owner_id)
 
     async def update(self, brand: Brand, data: BrandUpdate) -> Brand:
-        """Update brand."""
+        """
+        Update brand.
+        :param brand: Brand
+        :param data: BrandUpdate
+        :return: Brand
+        """
         if data.name is not None:
             brand.name = data.name
         if data.slug is not None:
@@ -86,7 +112,11 @@ class BrandService:
         return await self.brand_repository.update(brand)
 
     def _resend_cooldown_ok(self, brand: Brand) -> bool:
-        """Return True if enough time has passed since last send."""
+        """
+        Return True if enough time has passed since last send.
+        :param brand: Brand
+        :return: bool
+        """
         if not brand.verification_code_expires_at:
             return True
         # Code was sent at expires_at - expiry_minutes
@@ -98,7 +128,12 @@ class BrandService:
         )
 
     async def send_verification_code(self, brand_id: UUID, owner_id: UUID) -> Brand:
-        """Generate code, set expiry, send email (skeleton). Rate-limited."""
+        """
+        Generate code, set expiry, send email (skeleton). Rate-limited.
+        :param brand_id: UUID
+        :param owner_id: UUID
+        :return: Brand
+        """
         brand = await self.brand_repository.get_by_id(brand_id)
         if not brand:
             raise ValueError("Brand not found")
@@ -127,7 +162,12 @@ class BrandService:
         return brand
 
     async def verify_code(self, brand_id: UUID, code: str, owner_id: UUID) -> Brand:
-        """Check code and mark verified if valid."""
+        """Check code and mark verified if valid.
+        :param brand_id: UUID
+        :param code: str
+        :param owner_id: UUID
+        :return: Brand
+        """
         brand = await self.brand_repository.get_by_id(brand_id)
         if not brand:
             raise ValueError("Brand not found")

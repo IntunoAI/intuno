@@ -18,14 +18,22 @@ class ConversationRepository:
         self.session = session
 
     async def create(self, conversation: Conversation) -> Conversation:
-        """Create a new conversation."""
+        """
+        Create a new conversation.
+        :param conversation: Conversation
+        :return: Conversation
+        """
         self.session.add(conversation)
         await self.session.commit()
         await self.session.refresh(conversation)
         return conversation
 
     async def get_by_id(self, conversation_id: UUID) -> Optional[Conversation]:
-        """Get conversation by ID."""
+        """
+        Get conversation by ID.
+        :param conversation_id: UUID
+        :return: Optional[Conversation]
+        """
         result = await self.session.execute(
             select(Conversation).where(Conversation.id == conversation_id)
         )
@@ -36,7 +44,12 @@ class ConversationRepository:
         user_id: UUID,
         integration_id: Optional[UUID] = None,
     ) -> List[Conversation]:
-        """Get conversations for a user, optionally filtered by integration_id."""
+        """
+        Get conversations for a user, optionally filtered by integration_id.
+        :param user_id: UUID
+        :param integration_id: Optional[UUID]
+        :return: List[Conversation]
+        """
         q = (
             select(Conversation)
             .where(Conversation.user_id == user_id)
@@ -48,13 +61,21 @@ class ConversationRepository:
         return list(result.scalars().all())
 
     async def update(self, conversation: Conversation) -> Conversation:
-        """Update a conversation (fields already set on entity)."""
+        """
+        Update a conversation (fields already set on entity).
+        :param conversation: Conversation
+        :return: Conversation
+        """
         await self.session.commit()
         await self.session.refresh(conversation)
         return conversation
 
     async def delete(self, conversation_id: UUID) -> bool:
-        """Delete conversation by ID."""
+        """
+        Delete conversation by ID.
+        :param conversation_id: UUID
+        :return: bool
+        """
         result = await self.session.execute(
             select(Conversation).where(Conversation.id == conversation_id)
         )

@@ -19,14 +19,22 @@ class InvocationLogRepository:
         self.session = session
 
     async def create_invocation_log(self, invocation_log: InvocationLog) -> InvocationLog:
-        """Create a new invocation log."""
+        """
+        Create a new invocation log.
+        :param invocation_log: InvocationLog
+        :return: InvocationLog
+        """
         self.session.add(invocation_log)
         await self.session.commit()
         await self.session.refresh(invocation_log)
         return invocation_log
 
     async def get_invocation_log_by_id(self, log_id: UUID) -> Optional[InvocationLog]:
-        """Get invocation log by ID."""
+        """
+        Get invocation log by ID.
+        :param log_id: UUID
+        :return: Optional[InvocationLog]
+        """
         result = await self.session.execute(
             select(InvocationLog).where(InvocationLog.id == log_id)
         )
@@ -35,7 +43,12 @@ class InvocationLogRepository:
     async def get_invocation_logs_by_user_id(
         self, user_id: UUID, limit: int = 50
     ) -> List[InvocationLog]:
-        """Get invocation logs for a user."""
+        """
+        Get invocation logs for a user.
+        :param user_id: UUID
+        :param limit: int
+        :return: List[InvocationLog]
+        """
         result = await self.session.execute(
             select(InvocationLog)
             .where(InvocationLog.caller_user_id == user_id)
@@ -47,7 +60,12 @@ class InvocationLogRepository:
     async def get_invocation_logs_by_agent_id(
         self, agent_id: UUID, limit: int = 50
     ) -> List[InvocationLog]:
-        """Get invocation logs for an agent."""
+        """
+        Get invocation logs for an agent.
+        :param agent_id: UUID
+        :param limit: int
+        :return: List[InvocationLog]
+        """
         result = await self.session.execute(
             select(InvocationLog)
             .where(InvocationLog.target_agent_id == agent_id)
@@ -62,7 +80,13 @@ class InvocationLogRepository:
         user_id: UUID,
         limit: int = 50,
     ) -> List[InvocationLog]:
-        """Get invocation logs for a conversation (user-scoped)."""
+        """
+        Get invocation logs for a conversation.
+        :param conversation_id: UUID
+        :param user_id: UUID
+        :param limit: int
+        :return: List[InvocationLog]
+        """
         result = await self.session.execute(
             select(InvocationLog)
             .where(
@@ -80,8 +104,13 @@ class InvocationLogRepository:
         since: datetime,
         until: Optional[datetime] = None,
     ) -> int:
-        """Count invocations for an integration in a time window (for quotas).
+        """
+        Count invocations for an integration in a time window.
         If integration_id is None, counts global invocations (no integration filter).
+        :param integration_id: Optional[UUID]
+        :param since: datetime
+        :param until: Optional[datetime]
+        :return: int
         """
         until = until or datetime.now(timezone.utc)
         q = select(func.count(InvocationLog.id)).where(
@@ -96,7 +125,12 @@ class InvocationLogRepository:
     async def get_agent_quality_metrics(
         self, agent_id: UUID, window_days: int = 90
     ) -> Tuple[Optional[float], Optional[float], int]:
-        """Aggregate quality metrics for an agent from invocation logs (on-demand)."""
+        """
+        Get quality metrics for an agent from invocation logs (on-demand).
+        :param agent_id: UUID
+        :param window_days: int
+        :return: Tuple[Optional[float], Optional[float], int]
+        """
         since = datetime.now(timezone.utc) - timedelta(days=window_days)
         result = await self.session.execute(
             select(
@@ -120,7 +154,12 @@ class InvocationLogRepository:
     async def get_agent_quality_metrics_bulk(
         self, agent_ids: List[UUID], window_days: int = 90
     ) -> Dict[UUID, Tuple[Optional[float], Optional[float], int]]:
-        """Get quality metrics for multiple agents (on-demand)."""
+        """
+        Get quality metrics for multiple agents (on-demand).
+        :param agent_ids: List[UUID]
+        :param window_days: int
+        :return: Dict[UUID, Tuple[Optional[float], Optional[float], int]]
+        """
         if not agent_ids:
             return {}
         since = datetime.now(timezone.utc) - timedelta(days=window_days)
@@ -152,7 +191,12 @@ class InvocationLogRepository:
     async def get_trending_agent_ids(
         self, window_days: int = 7, limit: int = 20
     ) -> List[Tuple[UUID, int]]:
-        """Get agent IDs ordered by invocation count in the last N days (for trending)."""
+        """
+        Get agent IDs ordered by invocation count in the last N days (for trending).
+        :param window_days: int
+        :param limit: int
+        :return: List[Tuple[UUID, int]]
+        """
         since = datetime.now(timezone.utc) - timedelta(days=window_days)
         result = await self.session.execute(
             select(

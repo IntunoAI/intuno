@@ -18,14 +18,22 @@ class MessageRepository:
         self.session = session
 
     async def create(self, message: Message) -> Message:
-        """Create a new message."""
+        """
+        Create a new message.
+        :param message: Message
+        :return: Message
+        """
         self.session.add(message)
         await self.session.commit()
         await self.session.refresh(message)
         return message
 
     async def get_by_id(self, message_id: UUID) -> Optional[Message]:
-        """Get message by ID."""
+        """
+        Get message by ID.
+        :param message_id: UUID
+        :return: Optional[Message]
+        """
         result = await self.session.execute(
             select(Message).where(Message.id == message_id)
         )
@@ -37,7 +45,13 @@ class MessageRepository:
         limit: int = 100,
         offset: int = 0,
     ) -> List[Message]:
-        """Get messages for a conversation, ordered by created_at ascending."""
+        """
+        Get messages for a conversation, ordered by created_at ascending.
+        :param conversation_id: UUID
+        :param limit: int
+        :param offset: int
+        :return: List[Message]
+        """
         result = await self.session.execute(
             select(Message)
             .where(Message.conversation_id == conversation_id)
@@ -48,13 +62,21 @@ class MessageRepository:
         return list(result.scalars().all())
 
     async def update(self, message: Message) -> Message:
-        """Update a message (fields already set on entity)."""
+        """
+        Update a message (fields already set on entity).
+        :param message: Message
+        :return: Message
+        """
         await self.session.commit()
         await self.session.refresh(message)
         return message
 
     async def delete(self, message_id: UUID) -> bool:
-        """Delete message by ID."""
+        """
+        Delete message by ID.
+        :param message_id: UUID
+        :return: bool
+        """
         result = await self.session.execute(
             select(Message).where(Message.id == message_id)
         )

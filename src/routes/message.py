@@ -23,7 +23,13 @@ async def get_message(
     current_user: User = Depends(get_current_user),
     message_service: MessageService = Depends(),
 ) -> MessageResponse:
-    """Get a message by ID (user-scoped via conversation ownership)."""
+    """Get a message by ID (user-scoped via conversation ownership).
+    :param conversation_id: UUID
+    :param message_id: UUID
+    :param current_user: User
+    :param message_service: MessageService
+    :return: MessageResponse
+    """
     message = await message_service.get(
         conversation_id, message_id, current_user.id
     )
@@ -40,7 +46,14 @@ async def update_message(
     current_user: User = Depends(get_current_user),
     message_service: MessageService = Depends(),
 ) -> MessageResponse:
-    """Update a message (user-scoped via conversation ownership)."""
+    """Update a message (user-scoped via conversation ownership).
+    :param conversation_id: UUID
+    :param message_id: UUID
+    :param data: MessageUpdate
+    :param current_user: User
+    :param message_service: MessageService
+    :return: MessageResponse
+    """
     message = await message_service.update(
         conversation_id, message_id, current_user.id, data
     )
@@ -56,7 +69,13 @@ async def delete_message(
     current_user: User = Depends(get_current_user),
     message_service: MessageService = Depends(),
 ) -> None:
-    """Delete a message (user-scoped via conversation ownership)."""
+    """Delete a message (user-scoped via conversation ownership).
+    :param conversation_id: UUID
+    :param message_id: UUID
+    :param current_user: User
+    :param message_service: MessageService
+    :return: None
+    """
     success = await message_service.delete(
         conversation_id, message_id, current_user.id
     )

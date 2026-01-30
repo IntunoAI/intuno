@@ -19,14 +19,22 @@ class IntegrationRepository:
         self.session = session
 
     async def create(self, integration: Integration) -> Integration:
-        """Create a new integration."""
+        """
+        Create a new integration.
+        :param integration: Integration
+        :return: Integration
+        """
         self.session.add(integration)
         await self.session.commit()
         await self.session.refresh(integration)
         return integration
 
     async def get_by_id(self, integration_id: UUID) -> Optional[Integration]:
-        """Get integration by ID (with api_keys loaded for detail)."""
+        """
+        Get integration by ID.
+        :param integration_id: UUID
+        :return: Optional[Integration]
+        """
         result = await self.session.execute(
             select(Integration)
             .where(Integration.id == integration_id)
@@ -35,7 +43,11 @@ class IntegrationRepository:
         return result.scalar_one_or_none()
 
     async def get_by_user_id(self, user_id: UUID) -> List[Integration]:
-        """Get all integrations for a user (with api_keys loaded for has_api_key hint)."""
+        """
+        Get all integrations for a user.
+        :param user_id: UUID
+        :return: List[Integration]
+        """
         result = await self.session.execute(
             select(Integration)
             .where(Integration.user_id == user_id)
@@ -45,7 +57,11 @@ class IntegrationRepository:
         return list(result.scalars().all())
 
     async def delete(self, integration_id: UUID) -> bool:
-        """Delete integration by ID."""
+        """
+        Delete integration by ID.
+        :param integration_id: UUID
+        :return: bool
+        """
         result = await self.session.execute(
             select(Integration).where(Integration.id == integration_id)
         )

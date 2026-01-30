@@ -37,7 +37,8 @@ async def register_agent(
     enhance_manifest: bool = Query(default=True, description="Whether to enhance manifest text with LLM"),
     registry_service: RegistryService = Depends(),
 ):
-    """Register a new agent.
+    """
+    Register a new agent.
     :param agent_data: AgentCreate
     :param current_user: User
     :param enhance_manifest: bool - Whether to enhance manifest text with LLM
@@ -93,7 +94,20 @@ async def list_agents(
     offset: int = Query(default=0, ge=0),
     registry_service: RegistryService = Depends(),
 ):
-    """List and search agents with optional sort, order, category, and days filter."""
+    """List and search agents with optional sort, order, category, and days filter.
+    :param _: User
+    :param tags: List[str]
+    :param capability: str
+    :param search: str
+    :param category: Optional[str]
+    :param sort: str
+    :param order: str
+    :param days: Optional[int]
+    :param limit: int
+    :param offset: int
+    :param registry_service: RegistryService
+    :return: List[AgentListResponse]
+    """
     query = AgentSearchQuery(
         tags=tags,
         capability=capability,
@@ -154,7 +168,14 @@ async def list_new_agents(
     offset: int = Query(default=0, ge=0),
     registry_service: RegistryService = Depends(),
 ):
-    """List recently published agents (new in the last N days)."""
+    """List recently published agents (new in the last N days).
+    :param _: User
+    :param days: int
+    :param limit: int
+    :param offset: int
+    :param registry_service: RegistryService
+    :return: List[AgentListResponse]
+    """
     query = AgentSearchQuery(
         sort="created_at",
         order="desc",
@@ -209,7 +230,13 @@ async def list_trending_agents(
     limit: int = Query(default=20, ge=1, le=100),
     registry_service: RegistryService = Depends(),
 ):
-    """List agents ordered by invocation count in the last N days (trending/popular)."""
+    """List agents ordered by invocation count in the last N days (trending/popular).
+    :param _: User
+    :param window_days: int
+    :param limit: int
+    :param registry_service: RegistryService
+    :return: List[AgentListResponse]
+    """
     results = await registry_service.get_trending_agents(window_days=window_days, limit=limit)
     if not results:
         return []
@@ -309,6 +336,11 @@ async def list_agent_ratings(
     Intended for showcasing agent reviews in the frontend. Returns score,
     optional comment, and timestamps; user_id is an opaque UUID. No authentication
     required.
+    :param agent_id: str
+    :param registry_service: RegistryService
+    :param limit: int
+    :param offset: int
+    :return: List[RatingResponse]
     """
     agent = await registry_service.get_agent(agent_id)
     if not agent:
@@ -338,6 +370,9 @@ async def get_agent(
 
     Intended for showcasing agents in the frontend. Returns only public fields
     (no owner/brand PII). No authentication required.
+    :param agent_id: str
+    :param registry_service: RegistryService
+    :return: AgentResponse
     """
     
     agent = await registry_service.get_agent(agent_id)

@@ -18,7 +18,10 @@ class BrokerConfigRepository:
         self.session = session
 
     async def get_global_config(self) -> Optional[BrokerConfig]:
-        """Get global broker config (integration_id is None)."""
+        """
+        Get global broker config (integration_id is None).
+        :return: Optional[BrokerConfig]
+        """
         result = await self.session.execute(
             select(BrokerConfig).where(BrokerConfig.integration_id.is_(None))
         )
@@ -27,7 +30,11 @@ class BrokerConfigRepository:
     async def get_config_for_integration(
         self, integration_id: UUID
     ) -> Optional[BrokerConfig]:
-        """Get broker config for an integration."""
+        """
+        Get broker config for an integration.
+        :param integration_id: UUID
+        :return: Optional[BrokerConfig]
+        """
         result = await self.session.execute(
             select(BrokerConfig).where(BrokerConfig.integration_id == integration_id)
         )
@@ -38,7 +45,8 @@ class BrokerConfigRepository:
     ) -> Optional[BrokerConfig]:
         """
         Get effective config: integration override if present, else global.
-        Returns None if no config rows exist (caller uses defaults).
+        :param integration_id: Optional[UUID]
+        :return: Optional[BrokerConfig]
         """
         if integration_id is not None:
             config = await self.get_config_for_integration(integration_id)
@@ -47,7 +55,11 @@ class BrokerConfigRepository:
         return await self.get_global_config()
 
     async def upsert_config(self, config: BrokerConfig) -> BrokerConfig:
-        """Create or update a broker config."""
+        """
+        Create or update a broker config.
+        :param config: BrokerConfig
+        :return: BrokerConfig
+        """
         self.session.add(config)
         await self.session.commit()
         await self.session.refresh(config)

@@ -255,16 +255,20 @@ class RegistryRepository:
         return False
 
     async def add_capabilities(self, capabilities: List[Capability]) -> None:
-        """Add capabilities to the database.
+        """
+        Add capabilities to the database.
         :param capabilities: List[Capability]
+        :return: None
         """
         for capability in capabilities:
             self.session.add(capability)
         await self.session.commit()
 
     async def add_requirements(self, requirements: List[AgentRequirement]) -> None:
-        """Add requirements to the database.
+        """
+        Add requirements to the database.
         :param requirements: List[AgentRequirement]
+        :return: None
         """
         for requirement in requirements:
             self.session.add(requirement)
@@ -281,8 +285,10 @@ class RegistryRepository:
         return list(result.scalars().all())
     
     async def delete_agent_capabilities(self, agent_id: UUID) -> None:
-        """Delete all capabilities for an agent.
+        """
+        Delete all capabilities for an agent.
         :param agent_id: UUID
+        :return: None
         """
         result = await self.session.execute(
             select(Capability).where(Capability.agent_id == agent_id)
@@ -293,8 +299,10 @@ class RegistryRepository:
         await self.session.commit()
 
     async def delete_agent_requirements(self, agent_id: UUID) -> None:
-        """Delete all requirements for an agent.
+        """
+        Delete all requirements for an agent.
         :param agent_id: UUID
+        :return: None
         """
         result = await self.session.execute(
             select(AgentRequirement).where(AgentRequirement.agent_id == agent_id)
@@ -314,7 +322,8 @@ class RegistryRepository:
         capability_id: Optional[str] = None,
         comment: Optional[str] = None,
     ) -> AgentRating:
-        """Create or update a user's rating for an agent (or capability).
+        """
+        Create or update a user's rating for an agent (or capability).
         :param user_id: UUID
         :param agent_uuid: UUID (agents.id)
         :param score: int 1-5
@@ -351,9 +360,10 @@ class RegistryRepository:
         return rating
 
     async def get_rating_aggregate(self, agent_uuid: UUID) -> Tuple[Optional[float], int]:
-        """Get average score and count of ratings for an agent.
+        """
+        Get average score and count of ratings for an agent.
         :param agent_uuid: UUID (agents.id)
-        :return: (rating_avg or None, rating_count)
+        :return: Tuple[Optional[float], int]
         """
         result = await self.session.execute(
             select(func.avg(AgentRating.score).label("avg_score"), func.count(AgentRating.id).label("count")).where(
@@ -368,7 +378,8 @@ class RegistryRepository:
     async def get_ratings_for_agent(
         self, agent_uuid: UUID, limit: int = 20, offset: int = 0
     ) -> List[AgentRating]:
-        """List ratings for an agent (recent first).
+        """
+        List ratings for an agent (recent first).
         :param agent_uuid: UUID (agents.id)
         :param limit: int
         :param offset: int
@@ -386,9 +397,10 @@ class RegistryRepository:
     async def get_rating_aggregates_bulk(
         self, agent_uuids: List[UUID]
     ) -> Dict[UUID, Tuple[Optional[float], int]]:
-        """Get (rating_avg, rating_count) for multiple agents.
+        """
+        Get average score and count of ratings for multiple agents.
         :param agent_uuids: List[UUID]
-        :return: Dict[agent_uuid -> (avg or None, count)]
+        :return: Dict[UUID, Tuple[Optional[float], int]]
         """
         if not agent_uuids:
             return {}

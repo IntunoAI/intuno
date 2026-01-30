@@ -3,7 +3,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.core.security import get_user_and_integration_from_api_key
 from src.exceptions import DatabaseException
@@ -14,7 +14,10 @@ from src.services.broker import BrokerService
 router = APIRouter(prefix="/broker", tags=["Broker"])
 
 
-@router.post("/invoke", response_model=InvokeResponse)
+@router.post(
+    "/invoke",
+    response_model=InvokeResponse
+)
 async def invoke_agent(
     invoke_request: InvokeRequest,
     user_and_integration: tuple[User, Optional[UUID]] = Depends(
@@ -25,6 +28,10 @@ async def invoke_agent(
     """
     Invoke an agent capability through the broker.
     Optional conversation_id and message_id attach the invocation to a conversation/message.
+    :param invoke_request: InvokeRequest
+    :param user_and_integration: tuple[User, Optional[UUID]]
+    :param broker_service: BrokerService
+    :return: InvokeResponse
     """
     current_user, integration_id = user_and_integration
     try:
