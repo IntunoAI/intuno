@@ -5,9 +5,10 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 
 from src.core.settings import settings
+from src.exceptions import ForbiddenException, RateLimitException
 from src.models.brand import Brand
 from src.repositories.brand import BrandRepository
 from src.schemas.brand import BrandCreate, BrandUpdate
@@ -102,18 +103,12 @@ class BrandService:
         if not brand:
             raise ValueError("Brand not found")
         if brand.owner_id != owner_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not the brand owner",
-            )
+            raise ForbiddenException("Not the brand owner")
         if not brand.verification_email:
             raise ValueError("Brand has no verification email set")
 
         if not self._resend_cooldown_ok(brand):
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Please wait before requesting another code",
-            )
+            raise RateLimitException("Please wait before requesting another code")
 
         code = _generate_code(6)
         expires_at = datetime.now(timezone.utc) + timedelta(
@@ -137,10 +132,7 @@ class BrandService:
         if not brand:
             raise ValueError("Brand not found")
         if brand.owner_id != owner_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not the brand owner",
-            )
+            raise ForbiddenException("Not the brand owner")
 
         now = datetime.now(timezone.utc)
         if not brand.verification_code or brand.verification_code != code.strip():

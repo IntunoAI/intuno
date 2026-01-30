@@ -2,9 +2,10 @@
 
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from src.exceptions import UnauthorizedException
 from src.models.auth import User
 from src.services.auth import AuthService
 from src.core.security import api_key_header
@@ -24,24 +25,14 @@ async def get_current_user_from_token(
     user_id = auth_service.verify_token(credentials.credentials)
     
     if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
+        raise UnauthorizedException("Invalid authentication credentials")
+
     user = await auth_service.get_user_by_id(user_id)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
-        )
-    
+        raise UnauthorizedException("User not found or inactive")
+
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
-        )
+        raise UnauthorizedException("User not found or inactive")
     
     return user
 
@@ -53,24 +44,15 @@ async def get_current_user_from_api_key(
     """Get current user from API key."""
     
     if not x_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key required",
-        )
-    
+        raise UnauthorizedException("API key required")
+
     user = await auth_service.verify_api_key(x_api_key)
-    
+
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key or user inactive",
-        )
-    
+        raise UnauthorizedException("Invalid API key or user inactive")
+
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key or user inactive",
-        )
+        raise UnauthorizedException("Invalid API key or user inactive")
     
     return user
 
@@ -120,7 +102,4 @@ async def get_current_user(
             return user
     
     # Neither method worked
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-    )
+    raise UnauthorizedException("Not authenticated")

@@ -1,4 +1,4 @@
-"""Registry domain schemas."""
+"""Registry domain schemas. Response classes know how to parse ORM (CapabilitySchema.from_capability)."""
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -6,14 +6,31 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from src.models.registry import AgentRequirement, Capability
+
 
 class CapabilitySchema(BaseModel):
-    """Capability schema matching the Intuno spec."""
-    
+    """Capability schema matching the Intuno spec. Model has capability_id and auth_type str."""
+
     id: str
     input_schema: Dict[str, Any]
     output_schema: Dict[str, Any]
     auth_type: Dict[str, str]
+
+    @classmethod
+    def from_capability(cls, cap: Capability) -> "CapabilitySchema":
+        """Build from ORM Capability (id ← capability_id, auth_type ← {"type": str})."""
+        return cls(
+            id=cap.capability_id,
+            input_schema=cap.input_schema,
+            output_schema=cap.output_schema,
+            auth_type={"type": cap.auth_type},
+        )
+
+
+def requirements_from_orm(requirements: List[AgentRequirement]) -> List[Dict[str, str]]:
+    """Build requirements list for AgentResponse from ORM AgentRequirement list."""
+    return [{"capability": req.required_capability} for req in requirements]
 
 
 class AgentManifest(BaseModel):

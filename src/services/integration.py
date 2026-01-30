@@ -3,8 +3,9 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 
+from src.exceptions import NotFoundException
 from src.models.integration import Integration
 from src.repositories.integration import IntegrationRepository
 from src.schemas.integration import IntegrationCreate, IntegrationListResponse, IntegrationResponse
@@ -60,10 +61,7 @@ class IntegrationService:
         """Create an API key tied to the integration. Returns (ApiKey record, raw key string)."""
         integration = await self.get(integration_id, user_id)
         if not integration:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Integration not found",
-            )
+            raise NotFoundException("Integration")
         return await self.auth_service.create_api_key(
             user_id=user_id,
             api_key_data=api_key_data,

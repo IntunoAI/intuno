@@ -27,13 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(health_router, tags=["Health"])
-app.include_router(auth_router, tags=["Authentication"])
-app.include_router(brand_router, tags=["Brands"])
+# Include routers (tags defined on each router)
+app.include_router(health_router)
+app.include_router(auth_router)
+app.include_router(brand_router)
 app.include_router(integration_router)
-app.include_router(registry_router, tags=["Registry"])
-app.include_router(broker_router, tags=["Broker"])
+app.include_router(registry_router)
+app.include_router(broker_router)
 app.include_router(conversation_router)
 app.include_router(message_router)
 app.include_router(invocation_log_router)

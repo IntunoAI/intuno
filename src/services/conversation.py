@@ -3,8 +3,9 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 
+from src.exceptions import BadRequestException
 from src.models.conversation import Conversation
 from src.repositories.conversation import ConversationRepository
 from src.repositories.integration import IntegrationRepository
@@ -31,10 +32,7 @@ class ConversationService:
         if integration_id is not None:
             integration = await self.integration_repository.get_by_id(integration_id)
             if not integration or integration.user_id != user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Integration not found or not owned by user",
-                )
+                raise BadRequestException("Integration not found or not owned by user")
         conversation = Conversation(
             user_id=user_id,
             integration_id=integration_id,
@@ -72,10 +70,7 @@ class ConversationService:
         if data.integration_id is not None:
             integration = await self.integration_repository.get_by_id(data.integration_id)
             if not integration or integration.user_id != user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Integration not found or not owned by user",
-                )
+                raise BadRequestException("Integration not found or not owned by user")
             conversation.integration_id = data.integration_id
         return await self.conversation_repository.update(conversation)
 

@@ -1,4 +1,18 @@
+"""Custom HTTP exceptions. All extend HTTPException so FastAPI handles them by default."""
+
 from fastapi import HTTPException, status
+
+__all__ = [
+    "BaseCustomException",
+    "UnauthorizedException",
+    "ForbiddenException",
+    "NotFoundException",
+    "ResourceAlreadyExistsException",
+    "BadRequestException",
+    "ValidationException",
+    "DatabaseException",
+    "RateLimitException",
+]
 
 
 class BaseCustomException(HTTPException):
@@ -44,9 +58,16 @@ class ResourceAlreadyExistsException(BaseCustomException):
         )
 
 
-# Validation Exceptions
+# Client Error Exceptions
+class BadRequestException(BaseCustomException):
+    """Exception raised when the request is invalid (e.g. business rule violation)."""
+
+    def __init__(self, detail: str = "Bad request"):
+        super().__init__(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
 class ValidationException(BaseCustomException):
-    """Exception raised when input validation fails"""
+    """Exception raised when input validation fails."""
 
     def __init__(self, detail: str = "Validation error"):
         super().__init__(

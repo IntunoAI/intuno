@@ -1,14 +1,16 @@
-"""Invocation log schemas."""
+"""Invocation log schemas. Response fields match InvocationLog model (Pydantic from_attributes)."""
 
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class InvocationLogResponse(BaseModel):
-    """Invocation log response schema (12-field mapping)."""
+    """Invocation log response schema; parse from ORM with model_validate(log)."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     caller_user_id: UUID

@@ -3,8 +3,9 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 
+from src.exceptions import NotFoundException
 from src.models.message import Message
 from src.repositories.conversation import ConversationRepository
 from src.repositories.message import MessageRepository
@@ -31,10 +32,7 @@ class MessageService:
         """Create a message in a conversation. Validates conversation belongs to user."""
         conversation = await self.conversation_repository.get_by_id(conversation_id)
         if not conversation or conversation.user_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Conversation not found",
-            )
+            raise NotFoundException("Conversation")
         message = Message(
             conversation_id=conversation_id,
             role=data.role,

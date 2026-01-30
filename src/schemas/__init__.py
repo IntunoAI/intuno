@@ -9,8 +9,32 @@ from src.schemas.auth import (
     UserRegister,
     UserResponse,
 )
+from src.schemas.brand import (
+    BrandCreate,
+    BrandResponse,
+    BrandUpdate,
+    VerifyBrandRequest,
+    VerifyBrandResponse,
+)
 from src.schemas.broker import InvokeRequest, InvokeResponse
+from src.schemas.conversation import (
+    ConversationCreate,
+    ConversationListResponse,
+    ConversationResponse,
+    ConversationUpdate,
+)
+from src.schemas.integration import (
+    IntegrationCreate,
+    IntegrationListResponse,
+    IntegrationResponse,
+)
 from src.schemas.invocation_log import InvocationLogResponse
+from src.schemas.message import (
+    MessageCreate,
+    MessageListResponse,
+    MessageResponse,
+    MessageUpdate,
+)
 from src.schemas.registry import (
     AgentCreate,
     AgentListResponse,
@@ -20,28 +44,55 @@ from src.schemas.registry import (
     AgentUpdate,
     CapabilitySchema,
     DiscoverQuery,
+    RateRequest,
+    RatingResponse,
+    requirements_from_orm,
 )
 
 __all__ = [
-    # Auth schemas
-    "UserRegister",
-    "UserLogin",
-    "TokenResponse",
+    # Auth
     "ApiKeyCreate",
-    "ApiKeyResponse",
     "ApiKeyListResponse",
+    "ApiKeyResponse",
+    "TokenResponse",
+    "UserLogin",
+    "UserRegister",
     "UserResponse",
-    # Registry schemas
-    "AgentManifest",
-    "CapabilitySchema",
-    "AgentResponse",
-    "AgentListResponse",
-    "AgentSearchQuery",
-    "DiscoverQuery",
-    "AgentCreate",
-    "AgentUpdate",
-    # Broker schemas
+    # Brand
+    "BrandCreate",
+    "BrandResponse",
+    "BrandUpdate",
+    "VerifyBrandRequest",
+    "VerifyBrandResponse",
+    # Broker
     "InvokeRequest",
     "InvokeResponse",
+    # Conversation
+    "ConversationCreate",
+    "ConversationListResponse",
+    "ConversationResponse",
+    "ConversationUpdate",
+    # Integration
+    "IntegrationCreate",
+    "IntegrationListResponse",
+    "IntegrationResponse",
+    # Invocation log
     "InvocationLogResponse",
+    # Message
+    "MessageCreate",
+    "MessageListResponse",
+    "MessageResponse",
+    "MessageUpdate",
+    # Registry
+    "AgentCreate",
+    "AgentListResponse",
+    "AgentManifest",
+    "AgentResponse",
+    "AgentSearchQuery",
+    "AgentUpdate",
+    "CapabilitySchema",
+    "DiscoverQuery",
+    "RateRequest",
+    "RatingResponse",
+    "requirements_from_orm",
 ]

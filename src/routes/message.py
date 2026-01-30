@@ -2,9 +2,10 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from src.core.auth import get_current_user
+from src.exceptions import NotFoundException
 from src.models.auth import User
 from src.schemas.message import MessageResponse, MessageUpdate
 from src.services.message import MessageService
@@ -27,18 +28,8 @@ async def get_message(
         conversation_id, message_id, current_user.id
     )
     if not message:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Message not found",
-        )
-    return MessageResponse(
-        id=message.id,
-        conversation_id=message.conversation_id,
-        role=message.role,
-        content=message.content,
-        metadata=message.metadata_,
-        created_at=message.created_at,
-    )
+        raise NotFoundException("Message")
+    return message
 
 
 @router.patch("/{message_id}", response_model=MessageResponse)
@@ -54,18 +45,8 @@ async def update_message(
         conversation_id, message_id, current_user.id, data
     )
     if not message:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Message not found",
-        )
-    return MessageResponse(
-        id=message.id,
-        conversation_id=message.conversation_id,
-        role=message.role,
-        content=message.content,
-        metadata=message.metadata_,
-        created_at=message.created_at,
-    )
+        raise NotFoundException("Message")
+    return message
 
 
 @router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -80,7 +61,4 @@ async def delete_message(
         conversation_id, message_id, current_user.id
     )
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Message not found",
-        )
+        raise NotFoundException("Message")

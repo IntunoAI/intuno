@@ -1,10 +1,10 @@
-"""Conversation domain schemas."""
+"""Conversation domain schemas. Response schemas accept ORM via from_attributes."""
 
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ConversationCreate(BaseModel):
@@ -22,7 +22,9 @@ class ConversationUpdate(BaseModel):
 
 
 class ConversationResponse(BaseModel):
-    """Conversation response schema."""
+    """Conversation response schema; parse from ORM with model_validate(conv)."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     user_id: UUID
@@ -33,7 +35,9 @@ class ConversationResponse(BaseModel):
 
 
 class ConversationListResponse(BaseModel):
-    """Conversation list item schema."""
+    """Conversation list item schema; same shape as ConversationResponse."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     user_id: UUID

@@ -1,11 +1,17 @@
-"""Registry routes for agent management."""
+"""Registry routes for agent management. Response building in routes via Pydantic/schema helpers.
+
+Endpoints tagged "Public" (GET /agents/{agent_id}, GET /agents/{agent_id}/ratings) require
+no authentication and are intended for showcasing agents and reviews in the frontend.
+They return only public data (no owner/brand PII).
+"""
 
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from src.core.auth import get_current_user
+from src.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from src.models.auth import User
 from src.schemas.registry import (
     AgentCreate,
@@ -13,9 +19,11 @@ from src.schemas.registry import (
     AgentResponse,
     AgentSearchQuery,
     AgentUpdate,
+    CapabilitySchema,
     DiscoverQuery,
     RateRequest,
     RatingResponse,
+    requirements_from_orm,
 )
 from src.services.registry import RegistryService
 
@@ -45,21 +53,6 @@ async def register_agent(
             brand_id=agent_data.brand_id,
         )
         
-        # Convert capabilities to response format
-        capabilities = []
-        for cap in agent.capabilities:
-            capabilities.append({
-                "id": cap.capability_id,
-                "input_schema": cap.input_schema,
-                "output_schema": cap.output_schema,
-                "auth_type": {"type": cap.auth_type},
-            })
-        
-        # Convert requirements to response format
-        requirements = []
-        for req in agent.requirements:
-            requirements.append({"capability": req.required_capability})
-
         return AgentResponse(
             id=agent.id,
             agent_id=agent.agent_id,
@@ -74,8 +67,8 @@ async def register_agent(
             is_active=agent.is_active,
             created_at=agent.created_at,
             updated_at=agent.updated_at,
-            capabilities=capabilities,
-            requirements=requirements,
+            capabilities=[CapabilitySchema.from_capability(cap) for cap in agent.capabilities],
+            requirements=requirements_from_orm(agent.requirements),
             rating_avg=None,
             rating_count=0,
             quality_success_rate=None,
@@ -83,10 +76,7 @@ async def register_agent(
             quality_invocation_count=0,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(str(e))
 
 
 @router.get("/agents", response_model=List[AgentListResponse])
@@ -145,15 +135,7 @@ async def list_agents(
             trust_verification=agent.trust_verification,
             is_active=agent.is_active,
             created_at=agent.created_at,
-            capabilities=[
-                {
-                    "id": cap.capability_id,
-                    "input_schema": cap.input_schema,
-                    "output_schema": cap.output_schema,
-                    "auth_type": {"type": cap.auth_type},
-                }
-                for cap in agent.capabilities
-            ],
+            capabilities=[CapabilitySchema.from_capability(cap) for cap in agent.capabilities],
             rating_avg=_rating(agent.id)[0],
             rating_count=_rating(agent.id)[1],
             quality_success_rate=_quality(agent.id)[0],
@@ -209,15 +191,7 @@ async def list_new_agents(
             trust_verification=agent.trust_verification,
             is_active=agent.is_active,
             created_at=agent.created_at,
-            capabilities=[
-                {
-                    "id": cap.capability_id,
-                    "input_schema": cap.input_schema,
-                    "output_schema": cap.output_schema,
-                    "auth_type": {"type": cap.auth_type},
-                }
-                for cap in agent.capabilities
-            ],
+            capabilities=[CapabilitySchema.from_capability(cap) for cap in agent.capabilities],
             rating_avg=_rating(agent.id)[0],
             rating_count=_rating(agent.id)[1],
             quality_success_rate=_quality(agent.id)[0],
@@ -269,15 +243,7 @@ async def list_trending_agents(
             trust_verification=agent.trust_verification,
             is_active=agent.is_active,
             created_at=agent.created_at,
-            capabilities=[
-                {
-                    "id": cap.capability_id,
-                    "input_schema": cap.input_schema,
-                    "output_schema": cap.output_schema,
-                    "auth_type": {"type": cap.auth_type},
-                }
-                for cap in agent.capabilities
-            ],
+            capabilities=[CapabilitySchema.from_capability(cap) for cap in agent.capabilities],
             rating_avg=_rating(agent.id)[0],
             rating_count=_rating(agent.id)[1],
             quality_success_rate=_quality(agent.id)[0],
@@ -323,36 +289,30 @@ async def rate_agent(
         )
     except ValueError as e:
         if "not found" in str(e).lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=str(e),
-            )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+            raise NotFoundException(str(e))
+        raise BadRequestException(str(e))
 
 
-@router.get("/agents/{agent_id}/ratings", response_model=List[RatingResponse])
+@router.get(
+    "/agents/{agent_id}/ratings",
+    response_model=List[RatingResponse],
+    tags=["Public"],
+)
 async def list_agent_ratings(
     agent_id: str,
     registry_service: RegistryService = Depends(),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
-    """List recent ratings for an agent (paginated).
-    :param agent_id: str - Agent ID (e.g. agent:ns:name:version)
-    :param registry_service: RegistryService
-    :param limit: int
-    :param offset: int
-    :return: List[RatingResponse]
+    """List recent ratings for an agent (public, no auth).
+
+    Intended for showcasing agent reviews in the frontend. Returns score,
+    optional comment, and timestamps; user_id is an opaque UUID. No authentication
+    required.
     """
     agent = await registry_service.get_agent(agent_id)
     if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found",
-        )
+        raise NotFoundException("Agent")
     ratings = await registry_service.get_ratings_for_agent(agent.id, limit=limit, offset=offset)
     return [
         RatingResponse(
@@ -369,41 +329,23 @@ async def list_agent_ratings(
     ]
 
 
-@router.get("/agents/{agent_id}", response_model=AgentResponse)
+@router.get("/agents/{agent_id}", response_model=AgentResponse, tags=["Public"])
 async def get_agent(
     agent_id: str,
     registry_service: RegistryService = Depends(),
 ):
-    """Get agent details by agent_id.
-    :param agent_id: str
-    :param registry_service: RegistryService
-    :return: AgentResponse
+    """Get agent details by agent_id (public, no auth).
+
+    Intended for showcasing agents in the frontend. Returns only public fields
+    (no owner/brand PII). No authentication required.
     """
     
     agent = await registry_service.get_agent(agent_id)
     if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found",
-        )
+        raise NotFoundException("Agent")
 
     rating_avg, rating_count = await registry_service.get_rating_aggregate(agent.id)
     quality_sr, quality_lat, quality_count = await registry_service.get_agent_quality_metrics(agent.id)
-
-    # Convert capabilities to response format
-    capabilities = []
-    for cap in agent.capabilities:
-        capabilities.append({
-            "id": cap.capability_id,
-            "input_schema": cap.input_schema,
-            "output_schema": cap.output_schema,
-            "auth_type": cap.auth_type,
-        })
-
-    # Convert requirements to response format
-    requirements = []
-    for req in agent.requirements:
-        requirements.append({"capability": req.required_capability})
 
     return AgentResponse(
         id=agent.id,
@@ -418,8 +360,8 @@ async def get_agent(
         is_active=agent.is_active,
         created_at=agent.created_at,
         updated_at=agent.updated_at,
-        capabilities=capabilities,
-        requirements=requirements,
+        capabilities=[CapabilitySchema.from_capability(cap) for cap in agent.capabilities],
+        requirements=requirements_from_orm(agent.requirements),
         category=getattr(agent, "category", None),
         rating_avg=round(rating_avg, 2) if rating_avg is not None else None,
         rating_count=rating_count,
@@ -455,21 +397,6 @@ async def update_agent(
             brand_id=agent_data.brand_id,
         )
         
-        # Convert capabilities to response format
-        capabilities = []
-        for cap in agent.capabilities:
-            capabilities.append({
-                "id": cap.capability_id,
-                "input_schema": cap.input_schema,
-                "output_schema": cap.output_schema,
-                "auth_type": {"type": cap.auth_type},
-            })
-        
-        # Convert requirements to response format
-        requirements = []
-        for req in agent.requirements:
-            requirements.append({"capability": req.required_capability})
-        
         rating_avg, rating_count = await registry_service.get_rating_aggregate(agent.id)
         quality_sr, quality_lat, quality_count = await registry_service.get_agent_quality_metrics(agent.id)
         return AgentResponse(
@@ -485,8 +412,8 @@ async def update_agent(
             is_active=agent.is_active,
             created_at=agent.created_at,
             updated_at=agent.updated_at,
-            capabilities=capabilities,
-            requirements=requirements,
+            capabilities=[CapabilitySchema.from_capability(cap) for cap in agent.capabilities],
+            requirements=requirements_from_orm(agent.requirements),
             category=getattr(agent, "category", None),
             rating_avg=round(rating_avg, 2) if rating_avg is not None else None,
             rating_count=rating_count,
@@ -495,10 +422,7 @@ async def update_agent(
             quality_invocation_count=quality_count,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(str(e))
 
 
 @router.delete("/agents/{agent_uuid}", status_code=status.HTTP_204_NO_CONTENT)
@@ -517,15 +441,9 @@ async def delete_agent(
     try:
         success = await registry_service.delete_agent(agent_uuid, current_user.id)
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Agent not found",
-            )
+            raise NotFoundException("Agent")
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(e),
-        )
+        raise ForbiddenException(str(e))
 
 
 @router.get("/discover", response_model=List[AgentListResponse])

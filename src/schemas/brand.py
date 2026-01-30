@@ -1,10 +1,10 @@
-"""Brand schemas."""
+"""Brand schemas. Response schema accepts ORM via from_attributes (extra fields ignored)."""
 
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class BrandCreate(BaseModel):
@@ -30,7 +30,9 @@ class BrandUpdate(BaseModel):
 
 
 class BrandResponse(BaseModel):
-    """Brand response schema."""
+    """Brand response schema; parse from ORM with model_validate(brand). Excludes verification_code."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     owner_id: UUID

@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src.core.auth import get_current_user
+from src.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from src.models.auth import User
 from src.schemas.brand import (
     BrandCreate,
@@ -19,24 +20,6 @@ from src.services.brand import BrandService
 router = APIRouter(prefix="/brands", tags=["Brands"])
 
 
-def _brand_to_response(brand) -> BrandResponse:
-    """Map Brand model to BrandResponse."""
-    return BrandResponse(
-        id=brand.id,
-        owner_id=brand.owner_id,
-        name=brand.name,
-        slug=brand.slug,
-        description=brand.description,
-        website=brand.website,
-        logo_url=brand.logo_url,
-        verification_email=brand.verification_email,
-        verification_status=brand.verification_status,
-        verified_at=brand.verified_at,
-        created_at=brand.created_at,
-        updated_at=brand.updated_at,
-    )
-
-
 @router.post("", response_model=BrandResponse, status_code=status.HTTP_201_CREATED)
 async def create_brand(
     data: BrandCreate,
@@ -46,12 +29,9 @@ async def create_brand(
     """Create a new brand (claim brand)."""
     try:
         brand = await brand_service.create(current_user.id, data)
-        return _brand_to_response(brand)
+        return brand
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(str(e))
 
 
 @router.get("/me", response_model=List[BrandResponse])
@@ -61,7 +41,7 @@ async def list_my_brands(
 ) -> List[BrandResponse]:
     """List current user's brands."""
     brands = await brand_service.list_by_owner(current_user.id)
-    return [_brand_to_response(b) for b in brands]
+    return brands
 
 
 @router.get("/{id_or_slug}", response_model=BrandResponse)
@@ -73,16 +53,10 @@ async def get_brand(
     """Get brand by ID or slug."""
     brand = await brand_service.get_by_id_or_slug(id_or_slug)
     if not brand:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Brand not found",
-        )
+        raise NotFoundException("Brand")
     if brand.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Brand not found",
-        )
-    return _brand_to_response(brand)
+        raise NotFoundException("Brand")
+    return brand
 
 
 @router.put("/{brand_id}", response_model=BrandResponse)
@@ -95,23 +69,14 @@ async def update_brand(
     """Update brand (wizard steps). Owner only."""
     brand = await brand_service.get_by_id(brand_id)
     if not brand:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Brand not found",
-        )
+        raise NotFoundException("Brand")
     if brand.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not the brand owner",
-        )
+        raise ForbiddenException("Not the brand owner")
     try:
         brand = await brand_service.update(brand, data)
-        return _brand_to_response(brand)
+        return brand
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(str(e))
 
 
 @router.post("/{brand_id}/resend-verification", status_code=status.HTTP_204_NO_CONTENT)
@@ -124,10 +89,7 @@ async def resend_verification(
     try:
         await brand_service.send_verification_code(brand_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(str(e))
     except HTTPException:
         raise
 
@@ -149,9 +111,6 @@ async def verify_brand(
             verification_status=brand.verification_status,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(str(e))
     except HTTPException:
         raise

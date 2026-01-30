@@ -3,10 +3,11 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.auth import get_current_user
+from src.exceptions import BadRequestException, NotFoundException, UnauthorizedException
 from src.database import get_db
 from src.models.auth import User
 from src.schemas.auth import (
@@ -45,10 +46,7 @@ async def register(
             updated_at=user.updated_at,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(str(e))
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -63,10 +61,7 @@ async def login(
     """
     user = await auth_service.authenticate_user(login_data)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-        )
+        raise UnauthorizedException("Invalid email or password")
     
     access_token = auth_service.create_access_token(user.id)
     return TokenResponse(
@@ -158,10 +153,7 @@ async def delete_api_key(
     
     success = await auth_service.delete_api_key(current_user.id, key_id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API key not found",
-        )
+        raise NotFoundException("API key")
 
 
 

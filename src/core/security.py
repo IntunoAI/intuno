@@ -1,10 +1,11 @@
 from typing import Optional, Tuple
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Security
+from fastapi import Depends, Security
 from fastapi.security import APIKeyHeader
 from starlette import status
 
+from src.exceptions import UnauthorizedException
 from src.models.auth import User
 from src.services.auth import AuthService
 
@@ -29,17 +30,11 @@ async def get_user_from_api_key(
         HTTPException: If the API key is missing, invalid, or expired.
     """
     if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key is missing",
-        )
+        raise UnauthorizedException("API key is missing")
 
     user = await auth_service.verify_api_key(api_key)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired API key",
-        )
+        raise UnauthorizedException("Invalid or expired API key")
 
     return user
 
@@ -59,15 +54,9 @@ async def get_user_and_integration_from_api_key(
         HTTPException: If the API key is missing, invalid, or expired.
     """
     if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key is missing",
-        )
+        raise UnauthorizedException("API key is missing")
     ctx = await auth_service.verify_api_key_and_get_context(api_key)
     if not ctx:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired API key",
-        )
+        raise UnauthorizedException("Invalid or expired API key")
     user, integration_id = ctx
     return (user, integration_id)

@@ -3,9 +3,10 @@
 from typing import List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from src.core.auth import get_current_user
+from src.exceptions import NotFoundException
 from src.models.auth import User
 from src.schemas.auth import ApiKeyCreate, ApiKeyListResponse, ApiKeyResponse
 from src.schemas.integration import (
@@ -26,15 +27,7 @@ async def create_integration(
 ) -> IntegrationResponse:
     """Create a new integration."""
     integration = await integration_service.create(current_user.id, data)
-    return IntegrationResponse(
-        id=integration.id,
-        user_id=integration.user_id,
-        name=integration.name,
-        kind=integration.kind,
-        metadata=integration.metadata_,
-        created_at=integration.created_at,
-        updated_at=integration.updated_at,
-    )
+    return integration
 
 
 @router.get("", response_model=List[IntegrationListResponse])
@@ -44,16 +37,7 @@ async def list_integrations(
 ) -> List[IntegrationListResponse]:
     """List integrations for the current user."""
     integrations = await integration_service.list(current_user.id)
-    return [
-        IntegrationListResponse(
-            id=i.id,
-            name=i.name,
-            kind=i.kind,
-            created_at=i.created_at,
-            has_api_key=len(i.api_keys) > 0,
-        )
-        for i in integrations
-    ]
+    return integrations
 
 
 @router.get("/{integration_id}", response_model=IntegrationResponse)
@@ -65,19 +49,8 @@ async def get_integration(
     """Get integration by ID (user-scoped)."""
     integration = await integration_service.get(integration_id, current_user.id)
     if not integration:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Integration not found",
-        )
-    return IntegrationResponse(
-        id=integration.id,
-        user_id=integration.user_id,
-        name=integration.name,
-        kind=integration.kind,
-        metadata=integration.metadata_,
-        created_at=integration.created_at,
-        updated_at=integration.updated_at,
-    )
+        raise NotFoundException("Integration")
+    return integration
 
 
 @router.delete("/{integration_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -89,10 +62,7 @@ async def delete_integration(
     """Delete integration (user-scoped)."""
     success = await integration_service.delete(integration_id, current_user.id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Integration not found",
-        )
+        raise NotFoundException("Integration")
 
 
 @router.get("/{integration_id}/api-keys", response_model=List[ApiKeyListResponse])
@@ -104,10 +74,7 @@ async def list_integration_api_keys(
     """List API keys for an integration (no raw key)."""
     integration = await integration_service.get(integration_id, current_user.id)
     if not integration:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Integration not found",
-        )
+        raise NotFoundException("Integration")
     return [
         ApiKeyListResponse(
             id=key.id,
@@ -157,7 +124,4 @@ async def revoke_integration_api_key(
         current_user.id, integration_id, key_id
     )
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Integration or API key not found",
-        )
+        raise NotFoundException("Integration or API key")
