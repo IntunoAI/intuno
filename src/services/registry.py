@@ -8,7 +8,7 @@ from fastapi import Depends
 
 from src.repositories.brand import BrandRepository
 from src.models.registry import Agent, AgentRating, Capability, AgentRequirement
-from src.repositories.broker import BrokerRepository
+from src.repositories.invocation_log import InvocationLogRepository
 from src.repositories.registry import RegistryRepository
 from src.schemas.registry import AgentManifest, AgentSearchQuery, DiscoverQuery
 from src.utilities.embedding import EmbeddingService
@@ -23,12 +23,12 @@ class RegistryService:
     def __init__(
         self,
         registry_repository: RegistryRepository = Depends(),
-        broker_repository: BrokerRepository = Depends(),
+        invocation_log_repository: InvocationLogRepository = Depends(),
         embedding_service: EmbeddingService = Depends(),
         brand_repository: BrandRepository = Depends(),
     ):
         self.registry_repository = registry_repository
-        self.broker_repository = broker_repository
+        self.invocation_log_repository = invocation_log_repository
         self.embedding_service = embedding_service
         self.brand_repository = brand_repository
         self.qdrant_service = QdrantService()
@@ -226,7 +226,7 @@ class RegistryService:
 
         agent_ids = [agent.id for agent, _ in results]
         rating_aggregates = await self.registry_repository.get_rating_aggregates_bulk(agent_ids)
-        quality_metrics = await self.broker_repository.get_agent_quality_metrics_bulk(agent_ids)
+        quality_metrics = await self.invocation_log_repository.get_agent_quality_metrics_bulk(agent_ids)
 
         now = datetime.now(timezone.utc)
         scored: List[Tuple[Agent, float, float]] = []
@@ -534,7 +534,7 @@ class RegistryService:
         :param window_days: int - Only consider last N days
         :return: (success_rate, avg_latency_ms, invocation_count)
         """
-        return await self.broker_repository.get_agent_quality_metrics(
+        return await self.invocation_log_repository.get_agent_quality_metrics(
             agent_uuid, window_days=window_days
         )
 
@@ -547,7 +547,7 @@ class RegistryService:
         :param window_days: int
         :return: Dict[UUID, (success_rate, avg_latency_ms, invocation_count)]
         """
-        return await self.broker_repository.get_agent_quality_metrics_bulk(
+        return await self.invocation_log_repository.get_agent_quality_metrics_bulk(
             agent_uuids, window_days=window_days
         )
 
@@ -560,7 +560,7 @@ class RegistryService:
         :param limit: int
         :return: List[(Agent, invocation_count)] ordered by count desc
         """
-        trending_ids = await self.broker_repository.get_trending_agent_ids(
+        trending_ids = await self.invocation_log_repository.get_trending_agent_ids(
             window_days=window_days, limit=limit
         )
         if not trending_ids:

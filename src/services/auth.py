@@ -112,10 +112,16 @@ class AuthService:
         """
         return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
 
-    async def create_api_key(self, user_id: UUID, api_key_data: ApiKeyCreate) -> tuple[ApiKey, str]:
-        """Create a new API key for a user.
+    async def create_api_key(
+        self,
+        user_id: UUID,
+        api_key_data: ApiKeyCreate,
+        integration_id: Optional[UUID] = None,
+    ) -> tuple[ApiKey, str]:
+        """Create a new API key for a user, optionally tied to an integration.
         :param user_id: UUID
         :param api_key_data: ApiKeyCreate
+        :param integration_id: Optional integration to attach the key to
         :return: tuple[ApiKey, str]
         """
         # Generate a random API key
@@ -126,6 +132,7 @@ class AuthService:
         # Create API key record
         api_key_record = ApiKey(
             user_id=user_id,
+            integration_id=integration_id,
             key_hash=key_hash,
             name=api_key_data.name,
             expires_at=api_key_data.expires_at,
@@ -157,6 +164,25 @@ class AuthService:
         # Get the user
         return await self.auth_repository.get_user_by_id(api_key_record.user_id)
 
+    async def verify_api_key_and_get_context(
+        self, api_key: str
+    ) -> Optional[tuple[User, Optional[UUID]]]:
+        """Verify an API key and return (user, integration_id). integration_id is None for personal keys.
+        :param api_key: str
+        :return: Optional[tuple[User, Optional[UUID]]] (user, integration_id) or None
+        """
+        key_hash = self._hash_api_key(api_key)
+        api_key_record = await self.auth_repository.get_api_key_by_hash(key_hash)
+        if not api_key_record:
+            return None
+        if api_key_record.expires_at and api_key_record.expires_at < datetime.utcnow():
+            return None
+        await self.auth_repository.update_api_key_last_used(api_key_record.id)
+        user = await self.auth_repository.get_user_by_id(api_key_record.user_id)
+        if not user or not user.is_active:
+            return None
+        return (user, api_key_record.integration_id)
+
     async def get_user_api_keys(self, user_id: UUID) -> list[ApiKey]:
         """Get all API keys for a user.
         :param user_id: UUID
@@ -172,6 +198,24 @@ class AuthService:
         """
         api_key = await self.auth_repository.get_api_key_by_id(key_id)
         if not api_key or api_key.user_id != user_id:
+            return False
+        return await self.auth_repository.delete_api_key(key_id)
+
+    async def delete_api_key_for_integration(
+        self, user_id: UUID, integration_id: UUID, key_id: UUID
+    ) -> bool:
+        """Delete an API key only if owned by user and tied to the given integration.
+        :param user_id: UUID
+        :param integration_id: UUID
+        :param key_id: UUID
+        :return: bool
+        """
+        api_key = await self.auth_repository.get_api_key_by_id(key_id)
+        if (
+            not api_key
+            or api_key.user_id != user_id
+            or api_key.integration_id != integration_id
+        ):
             return False
         return await self.auth_repository.delete_api_key(key_id)
 

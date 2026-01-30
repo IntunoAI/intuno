@@ -9,11 +9,8 @@ from src.schemas.auth import (
     UserRegister,
     UserResponse,
 )
-from src.schemas.broker import (
-    InvocationLogResponse,
-    InvokeRequest,
-    InvokeResponse,
-)
+from src.schemas.broker import InvokeRequest, InvokeResponse
+from src.schemas.invocation_log import InvocationLogResponse
 from src.schemas.registry import (
     AgentCreate,
     AgentListResponse,
