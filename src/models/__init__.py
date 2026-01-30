@@ -2,13 +2,14 @@
 from src.models.auth import ApiKey, User
 from src.models.base import BaseModel
 from src.models.broker import InvocationLog
-from src.models.registry import Agent, AgentRequirement, Capability
+from src.models.registry import Agent, AgentRating, AgentRequirement, Capability
 
 __all__ = [
     "BaseModel",
     "User",
     "ApiKey",
     "Agent",
+    "AgentRating",
     "Capability",
     "AgentRequirement",
     "InvocationLog",

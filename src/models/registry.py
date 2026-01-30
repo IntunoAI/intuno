@@ -1,13 +1,43 @@
 """Registry domain models."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import ARRAY, Boolean, Column, ForeignKey, Index, String, Text
+from sqlalchemy import ARRAY, Boolean, Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 from sqlalchemy.orm import relationship
 
 from .base import BaseModel
+
+
+class AgentRating(BaseModel):
+    """User rating for an agent (optionally for a specific capability)."""
+
+    __tablename__: str = "agent_ratings"
+
+    user_id: Column[UUID] = Column(
+        PostgresUUID, ForeignKey("users.id"), nullable=False
+    )
+    agent_id: Column[UUID] = Column(
+        PostgresUUID, ForeignKey("agents.id"), nullable=False
+    )
+    capability_id: Column[Optional[str]] = Column(String, nullable=True)
+    score: Column[int] = Column(Integer, nullable=False)  # 1-5
+    comment: Column[Optional[str]] = Column(Text, nullable=True)
+
+    # Relationships
+    agent = relationship("Agent", back_populates="ratings")
+
+    # Indexes: agent_id for aggregate/list by agent; user_id for "ratings by user"
+    __table_args__ = (
+        Index("idx_agent_ratings_agent_id", "agent_id"),
+        Index("idx_agent_ratings_user_id", "user_id"),
+        Index("idx_agent_ratings_agent_updated", "agent_id", "updated_at"),
+    )
+
+    # Uniqueness: one per (user_id, agent_id) when capability_id is NULL;
+    # one per (user_id, agent_id, capability_id) when set. Enforced by partial
+    # unique indexes in migration.
 
 
 class Agent(BaseModel):
@@ -25,6 +55,7 @@ class Agent(BaseModel):
     invoke_endpoint: Column[str] = Column(String, nullable=False)
     manifest_json: Column[Dict[str, Any]] = Column(JSONB, nullable=False)
     tags: Column[List[str]] = Column(ARRAY(String), nullable=False, default=list)
+    category: Column[Optional[str]] = Column(String, nullable=True)
     trust_verification: Column[str] = Column(String, nullable=False)
     is_active: Column[bool] = Column(Boolean, default=True, nullable=False)
     qdrant_point_id: Column[UUID] = Column(PostgresUUID, nullable=True, index=True)
@@ -35,10 +66,12 @@ class Agent(BaseModel):
     capabilities = relationship("Capability", back_populates="agent", cascade="all, delete-orphan")
     requirements = relationship("AgentRequirement", back_populates="agent", cascade="all, delete-orphan")
     invocation_logs = relationship("InvocationLog", back_populates="target_agent")
+    ratings = relationship("AgentRating", back_populates="agent", cascade="all, delete-orphan")
 
     # Indexes for performance
     __table_args__ = (
         Index("idx_agents_tags", "tags", postgresql_using="gin"),
+        Index("idx_agents_category", "category"),
     )
 
 

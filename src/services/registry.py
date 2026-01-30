@@ -1,16 +1,19 @@
 """Registry domain service."""
 
-from typing import List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
-from src.models.registry import Agent, Capability, AgentRequirement
+from fastapi import Depends
+
+from src.models.registry import Agent, AgentRating, Capability, AgentRequirement
+from src.repositories.broker import BrokerRepository
 from src.repositories.registry import RegistryRepository
 from src.schemas.registry import AgentManifest, AgentSearchQuery, DiscoverQuery
 from src.utilities.embedding import EmbeddingService
 from src.utilities.qdrant_service import QdrantService
 from src.utilities.semantic_enhancement import SemanticEnhancementService
 from src.core.settings import settings
-from fastapi import Depends
 
 
 class RegistryService:
@@ -19,9 +22,11 @@ class RegistryService:
     def __init__(
         self,
         registry_repository: RegistryRepository = Depends(),
+        broker_repository: BrokerRepository = Depends(),
         embedding_service: EmbeddingService = Depends(),
     ):
         self.registry_repository = registry_repository
+        self.broker_repository = broker_repository
         self.embedding_service = embedding_service
         self.qdrant_service = QdrantService()
         self.semantic_enhancement = SemanticEnhancementService(
@@ -66,6 +71,7 @@ class RegistryService:
             invoke_endpoint=manifest.endpoints["invoke"],
             manifest_json=manifest.model_dump(),
             tags=manifest.tags,
+            category=manifest.category,
             trust_verification=manifest.trust.get("verification", "self-signed"),
             qdrant_point_id=None,  # Will be set after agent is created
         )
@@ -162,7 +168,7 @@ class RegistryService:
 
     async def list_agents(self, query: AgentSearchQuery) -> List[Agent]:
         """
-        Search agents with filters.
+        Search agents with filters and optional sort/order/days.
         :param query: AgentSearchQuery
         :return: List[Agent]
         """
@@ -170,32 +176,67 @@ class RegistryService:
             tags=query.tags,
             capability=query.capability,
             search_text=query.search,
+            category=query.category,
+            sort=query.sort,
+            order=query.order,
+            days=query.days,
             limit=query.limit,
             offset=query.offset,
         )
 
     async def semantic_discover(self, query: DiscoverQuery, enhance_query: bool = True) -> List[Tuple[Agent, float]]:
         """
-        Semantic discovery using vector similarity.
-        :param query: DiscoverQuery
+        Semantic discovery using vector similarity, optionally re-ranked by quality and recency.
+        :param query: DiscoverQuery (includes rank_by: similarity_only | balanced | quality_first)
         :param enhance_query: Whether to enhance query with LLM
         :return: List[Tuple[Agent, float]] - List of (agent, similarity_score) tuples
         """
-        # Enhance query if enabled
         if enhance_query:
             enhanced_query_text = await self.semantic_enhancement.enhance_discovery_query(query.query)
         else:
             enhanced_query_text = query.query
-        
-        # Generate embedding for the enhanced query
+
         query_embedding = await self.embedding_service.generate_embedding(enhanced_query_text, enhance=False)
-        
-        # Perform semantic search with similarity threshold
-        return await self.registry_repository.semantic_discover(
+
+        results = await self.registry_repository.semantic_discover(
             embedding=query_embedding,
             limit=query.limit,
             similarity_threshold=query.similarity_threshold,
         )
+
+        if not results or query.rank_by == "similarity_only":
+            return results
+
+        agent_ids = [agent.id for agent, _ in results]
+        rating_aggregates = await self.registry_repository.get_rating_aggregates_bulk(agent_ids)
+        quality_metrics = await self.broker_repository.get_agent_quality_metrics_bulk(agent_ids)
+
+        now = datetime.now(timezone.utc)
+        scored: List[Tuple[Agent, float, float]] = []
+        for agent, distance in results:
+            similarity_norm = max(0.0, 1.0 - (distance / 2.0))
+
+            rating_avg, rating_count = rating_aggregates.get(agent.id, (None, 0))
+            success_rate, avg_latency_ms, inv_count = quality_metrics.get(agent.id, (None, None, 0))
+            rating_norm = (rating_avg / 5.0) if rating_avg is not None else 0.0
+            success_norm = success_rate if success_rate is not None else 0.0
+            latency_norm = (1.0 / (1.0 + (avg_latency_ms or 0) / 1000.0)) if (avg_latency_ms is not None or inv_count) else 0.0
+            quality_norm = rating_norm * 0.4 + success_norm * 0.4 + latency_norm * 0.2
+
+            updated = agent.updated_at or agent.created_at
+            updated_utc = updated if (getattr(updated, "tzinfo", None) and updated.tzinfo) else updated.replace(tzinfo=timezone.utc)
+            days_ago = (now - updated_utc).days
+            recency_norm = max(0.0, 1.0 - (days_ago / 90.0))
+
+            if query.rank_by == "quality_first":
+                composite = 0.2 * similarity_norm + 0.7 * quality_norm + 0.1 * recency_norm
+            else:
+                composite = 0.5 * similarity_norm + 0.35 * quality_norm + 0.15 * recency_norm
+
+            scored.append((agent, distance, composite))
+
+        scored.sort(key=lambda x: x[2], reverse=True)
+        return [(agent, distance) for agent, distance, _ in scored]
 
     async def get_agent(self, agent_id: str) -> Optional[Agent]:
         """
@@ -236,6 +277,7 @@ class RegistryService:
         agent.invoke_endpoint = manifest.endpoints["invoke"]
         agent.manifest_json = manifest.model_dump()
         agent.tags = manifest.tags
+        agent.category = manifest.category
         agent.trust_verification = manifest.trust.get("verification", "self-signed")
 
         # Regenerate enhanced embedding
@@ -381,3 +423,108 @@ class RegistryService:
         :return: List[Agent]
         """
         return await self.registry_repository.get_agents_by_user_id(user_id)
+
+    async def rate_agent(
+        self,
+        agent_id: str,
+        user_id: UUID,
+        score: int,
+        capability_id: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> AgentRating:
+        """
+        Submit or update a user's rating for an agent (or capability).
+        :param agent_id: str (agent_id string, e.g. agent:ns:name:version)
+        :param user_id: UUID
+        :param score: int 1-5
+        :param capability_id: Optional[str]
+        :param comment: Optional[str]
+        :return: AgentRating
+        """
+        agent = await self.registry_repository.get_agent_by_agent_id(agent_id)
+        if not agent:
+            raise ValueError("Agent not found")
+        return await self.registry_repository.upsert_rating(
+            user_id=user_id,
+            agent_uuid=agent.id,
+            score=score,
+            capability_id=capability_id,
+            comment=comment,
+        )
+
+    async def get_rating_aggregate(self, agent_uuid: UUID) -> Tuple[Optional[float], int]:
+        """
+        Get average rating and count for an agent.
+        :param agent_uuid: UUID (agents.id)
+        :return: (rating_avg or None, rating_count)
+        """
+        return await self.registry_repository.get_rating_aggregate(agent_uuid)
+
+    async def get_ratings_for_agent(
+        self, agent_uuid: UUID, limit: int = 20, offset: int = 0
+    ) -> List[AgentRating]:
+        """
+        List ratings for an agent (recent first).
+        :param agent_uuid: UUID (agents.id)
+        :param limit: int
+        :param offset: int
+        :return: List[AgentRating]
+        """
+        return await self.registry_repository.get_ratings_for_agent(
+            agent_uuid, limit=limit, offset=offset
+        )
+
+    async def get_rating_aggregates_bulk(
+        self, agent_uuids: List[UUID]
+    ) -> dict:
+        """
+        Get (rating_avg, rating_count) for multiple agents.
+        :param agent_uuids: List[UUID]
+        :return: Dict[UUID, Tuple[Optional[float], int]]
+        """
+        return await self.registry_repository.get_rating_aggregates_bulk(agent_uuids)
+
+    async def get_agent_quality_metrics(
+        self, agent_uuid: UUID, window_days: int = 90
+    ) -> Tuple[Optional[float], Optional[float], int]:
+        """
+        Get quality metrics for an agent from invocation logs (on-demand).
+        :param agent_uuid: UUID (agents.id)
+        :param window_days: int - Only consider last N days
+        :return: (success_rate, avg_latency_ms, invocation_count)
+        """
+        return await self.broker_repository.get_agent_quality_metrics(
+            agent_uuid, window_days=window_days
+        )
+
+    async def get_agent_quality_metrics_bulk(
+        self, agent_uuids: List[UUID], window_days: int = 90
+    ) -> Dict[UUID, Tuple[Optional[float], Optional[float], int]]:
+        """
+        Get quality metrics for multiple agents (on-demand).
+        :param agent_uuids: List[UUID]
+        :param window_days: int
+        :return: Dict[UUID, (success_rate, avg_latency_ms, invocation_count)]
+        """
+        return await self.broker_repository.get_agent_quality_metrics_bulk(
+            agent_uuids, window_days=window_days
+        )
+
+    async def get_trending_agents(
+        self, window_days: int = 7, limit: int = 20
+    ) -> List[Tuple[Agent, int]]:
+        """
+        Get agents ordered by invocation count in the last N days (trending).
+        :param window_days: int
+        :param limit: int
+        :return: List[(Agent, invocation_count)] ordered by count desc
+        """
+        trending_ids = await self.broker_repository.get_trending_agent_ids(
+            window_days=window_days, limit=limit
+        )
+        if not trending_ids:
+            return []
+        agent_ids = [aid for aid, _ in trending_ids]
+        agents = await self.registry_repository.get_agents_by_ids(agent_ids)
+        count_by_id = {aid: count for aid, count in trending_ids}
+        return [(agent, count_by_id[agent.id]) for agent in agents]

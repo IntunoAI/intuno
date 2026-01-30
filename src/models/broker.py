@@ -3,7 +3,7 @@
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 from sqlalchemy.orm import relationship
 
@@ -31,3 +31,10 @@ class InvocationLog(BaseModel):
     # Relationships
     caller_user = relationship("User", foreign_keys=[caller_user_id], overlaps="invocation_logs")
     target_agent = relationship("Agent", back_populates="invocation_logs")
+
+    # Indexes: target_agent_id + created_at for quality/trending; caller_user_id for "my logs"
+    __table_args__ = (
+        Index("idx_invocation_logs_target_agent_id", "target_agent_id"),
+        Index("idx_invocation_logs_target_agent_created_at", "target_agent_id", "created_at"),
+        Index("idx_invocation_logs_caller_user_id", "caller_user_id"),
+    )

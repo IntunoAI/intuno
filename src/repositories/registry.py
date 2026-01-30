@@ -1,13 +1,14 @@
 """Registry domain repository."""
 
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.models.registry import Agent, Capability, AgentRequirement
+from src.models.registry import Agent, AgentRating, Capability, AgentRequirement
 from src.database import get_db
 from fastapi import Depends
 
@@ -64,33 +65,64 @@ class RegistryRepository:
         )
         return list(result.scalars().all())
 
+    async def get_agents_by_ids(self, agent_ids: List[UUID]) -> List[Agent]:
+        """Get agents by IDs, preserving order. Only returns active agents.
+        :param agent_ids: List[UUID]
+        :return: List[Agent] in the same order as agent_ids (skips missing/inactive)
+        """
+        if not agent_ids:
+            return []
+        result = await self.session.execute(
+            select(Agent)
+            .options(selectinload(Agent.capabilities))
+            .where(Agent.id.in_(agent_ids), Agent.is_active)
+        )
+        agents = {a.id: a for a in result.scalars().all()}
+        return [agents[aid] for aid in agent_ids if aid in agents]
+
     async def list_agents(
         self,
         tags: Optional[List[str]] = None,
         capability: Optional[str] = None,
         search_text: Optional[str] = None,
+        category: Optional[str] = None,
+        sort: str = "created_at",
+        order: str = "desc",
+        days: Optional[int] = None,
         limit: int = 20,
         offset: int = 0,
     ) -> List[Agent]:
-        """Search agents with filters."""
+        """Search agents with filters and optional sort/order/days."""
         query = select(Agent).options(selectinload(Agent.capabilities)).where(Agent.is_active)
-        
+
         if tags:
             query = query.where(Agent.tags.overlap(tags))
-        
+
         if capability:
-            # This would need a join with capabilities table
-            # For now, we'll implement basic search
+            # Would need join with capabilities; leave as no-op for now
             pass
-        
+
         if search_text:
             query = query.where(
-                Agent.name.ilike(f"%{search_text}%") |
-                Agent.description.ilike(f"%{search_text}%")
+                Agent.name.ilike(f"%{search_text}%") | Agent.description.ilike(f"%{search_text}%")
             )
-        
+
+        if category is not None:
+            query = query.where(Agent.category == category)
+
+        if days is not None:
+            since = datetime.now(timezone.utc) - timedelta(days=days)
+            query = query.where(Agent.created_at >= since)
+
+        sort_column = getattr(Agent, sort, Agent.created_at)
+        if sort not in ("created_at", "updated_at", "name"):
+            sort_column = Agent.created_at
+        if order == "asc":
+            query = query.order_by(sort_column.asc())
+        else:
+            query = query.order_by(sort_column.desc())
+
         query = query.offset(offset).limit(limit)
-        
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
@@ -271,3 +303,109 @@ class RegistryRepository:
         for requirement in requirements:
             await self.session.delete(requirement)
         await self.session.commit()
+
+    # --- Agent ratings ---
+
+    async def upsert_rating(
+        self,
+        user_id: UUID,
+        agent_uuid: UUID,
+        score: int,
+        capability_id: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> AgentRating:
+        """Create or update a user's rating for an agent (or capability).
+        :param user_id: UUID
+        :param agent_uuid: UUID (agents.id)
+        :param score: int 1-5
+        :param capability_id: Optional[str]
+        :param comment: Optional[str]
+        :return: AgentRating
+        """
+        q = select(AgentRating).where(
+            AgentRating.user_id == user_id,
+            AgentRating.agent_id == agent_uuid,
+        )
+        if capability_id is None:
+            q = q.where(AgentRating.capability_id.is_(None))
+        else:
+            q = q.where(AgentRating.capability_id == capability_id)
+        result = await self.session.execute(q)
+        existing = result.scalar_one_or_none()
+        if existing:
+            existing.score = score
+            existing.comment = comment
+            await self.session.commit()
+            await self.session.refresh(existing)
+            return existing
+        rating = AgentRating(
+            user_id=user_id,
+            agent_id=agent_uuid,
+            capability_id=capability_id,
+            score=score,
+            comment=comment,
+        )
+        self.session.add(rating)
+        await self.session.commit()
+        await self.session.refresh(rating)
+        return rating
+
+    async def get_rating_aggregate(self, agent_uuid: UUID) -> Tuple[Optional[float], int]:
+        """Get average score and count of ratings for an agent.
+        :param agent_uuid: UUID (agents.id)
+        :return: (rating_avg or None, rating_count)
+        """
+        result = await self.session.execute(
+            select(func.avg(AgentRating.score).label("avg_score"), func.count(AgentRating.id).label("count")).where(
+                AgentRating.agent_id == agent_uuid
+            )
+        )
+        row = result.one()
+        avg_score = float(row.avg_score) if row.avg_score is not None else None
+        count = row.count or 0
+        return (avg_score, count)
+
+    async def get_ratings_for_agent(
+        self, agent_uuid: UUID, limit: int = 20, offset: int = 0
+    ) -> List[AgentRating]:
+        """List ratings for an agent (recent first).
+        :param agent_uuid: UUID (agents.id)
+        :param limit: int
+        :param offset: int
+        :return: List[AgentRating]
+        """
+        result = await self.session.execute(
+            select(AgentRating)
+            .where(AgentRating.agent_id == agent_uuid)
+            .order_by(AgentRating.updated_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.scalars().all())
+
+    async def get_rating_aggregates_bulk(
+        self, agent_uuids: List[UUID]
+    ) -> Dict[UUID, Tuple[Optional[float], int]]:
+        """Get (rating_avg, rating_count) for multiple agents.
+        :param agent_uuids: List[UUID]
+        :return: Dict[agent_uuid -> (avg or None, count)]
+        """
+        if not agent_uuids:
+            return {}
+        result = await self.session.execute(
+            select(
+                AgentRating.agent_id,
+                func.avg(AgentRating.score).label("avg_score"),
+                func.count(AgentRating.id).label("count"),
+            )
+            .where(AgentRating.agent_id.in_(agent_uuids))
+            .group_by(AgentRating.agent_id)
+        )
+        rows = result.all()
+        out: Dict[UUID, Tuple[Optional[float], int]] = {
+            aid: (None, 0) for aid in agent_uuids
+        }
+        for row in rows:
+            avg_score = float(row.avg_score) if row.avg_score is not None else None
+            out[row.agent_id] = (avg_score, row.count or 0)
+        return out

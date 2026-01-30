@@ -1,10 +1,13 @@
 """Broker domain repository."""
 
-from typing import List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
+
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.database import get_db
 from src.models.broker import InvocationLog
 
@@ -62,3 +65,88 @@ class BrokerRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def get_agent_quality_metrics(
+        self, agent_id: UUID, window_days: int = 90
+    ) -> Tuple[Optional[float], Optional[float], int]:
+        """Aggregate quality metrics for an agent from invocation logs (on-demand).
+        :param agent_id: UUID (agents.id)
+        :param window_days: int - Only consider logs from the last N days
+        :return: (success_rate 0-1 or None, avg_latency_ms or None, invocation_count)
+        """
+        since = datetime.now(timezone.utc) - timedelta(days=window_days)
+        result = await self.session.execute(
+            select(
+                func.count(InvocationLog.id).label("total"),
+                func.sum(case([(InvocationLog.status_code == 200, 1)], else_=0)).label("successes"),
+                func.avg(InvocationLog.latency_ms).label("avg_latency"),
+            ).where(
+                InvocationLog.target_agent_id == agent_id,
+                InvocationLog.created_at >= since,
+            )
+        )
+        row = result.one()
+        total = row.total or 0
+        if total == 0:
+            return (None, None, 0)
+        successes = row.successes or 0
+        success_rate = successes / total
+        avg_latency = float(row.avg_latency) if row.avg_latency is not None else None
+        return (success_rate, avg_latency, total)
+
+    async def get_agent_quality_metrics_bulk(
+        self, agent_ids: List[UUID], window_days: int = 90
+    ) -> Dict[UUID, Tuple[Optional[float], Optional[float], int]]:
+        """Get quality metrics for multiple agents (on-demand).
+        :param agent_ids: List[UUID]
+        :param window_days: int
+        :return: Dict[agent_id -> (success_rate, avg_latency_ms, invocation_count)]
+        """
+        if not agent_ids:
+            return {}
+        since = datetime.now(timezone.utc) - timedelta(days=window_days)
+        result = await self.session.execute(
+            select(
+                InvocationLog.target_agent_id,
+                func.count(InvocationLog.id).label("total"),
+                func.sum(case([(InvocationLog.status_code == 200, 1)], else_=0)).label("successes"),
+                func.avg(InvocationLog.latency_ms).label("avg_latency"),
+            )
+            .where(
+                InvocationLog.target_agent_id.in_(agent_ids),
+                InvocationLog.created_at >= since,
+            )
+            .group_by(InvocationLog.target_agent_id)
+        )
+        rows = result.all()
+        out: Dict[UUID, Tuple[Optional[float], Optional[float], int]] = {
+            aid: (None, None, 0) for aid in agent_ids
+        }
+        for row in rows:
+            total = row.total or 0
+            successes = row.successes or 0
+            success_rate = (successes / total) if total else None
+            avg_latency = float(row.avg_latency) if row.avg_latency is not None else None
+            out[row.target_agent_id] = (success_rate, avg_latency, total)
+        return out
+
+    async def get_trending_agent_ids(
+        self, window_days: int = 7, limit: int = 20
+    ) -> List[Tuple[UUID, int]]:
+        """Get agent IDs ordered by invocation count in the last N days (for trending).
+        :param window_days: int
+        :param limit: int
+        :return: List[(agent_id, invocation_count)] ordered by count desc
+        """
+        since = datetime.now(timezone.utc) - timedelta(days=window_days)
+        result = await self.session.execute(
+            select(
+                InvocationLog.target_agent_id,
+                func.count(InvocationLog.id).label("invocation_count"),
+            )
+            .where(InvocationLog.created_at >= since)
+            .group_by(InvocationLog.target_agent_id)
+            .order_by(func.count(InvocationLog.id).desc())
+            .limit(limit)
+        )
+        return [(row.target_agent_id, row.invocation_count) for row in result.all()]
