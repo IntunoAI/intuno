@@ -15,6 +15,14 @@ class MessageCreate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+class MessageUpdate(BaseModel):
+    """Message update schema (PATCH semantics)."""
+
+    role: Optional[str] = None
+    content: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
 class MessageResponse(BaseModel):
     """Message response schema."""
 

@@ -9,7 +9,7 @@ from src.models.conversation import Conversation
 from src.repositories.conversation import ConversationRepository
 from src.repositories.integration import IntegrationRepository
 from src.services.invocation_log import InvocationLogService
-from src.schemas.conversation import ConversationCreate
+from src.schemas.conversation import ConversationCreate, ConversationUpdate
 
 
 class ConversationService:
@@ -56,6 +56,35 @@ class ConversationService:
         if not conversation or conversation.user_id != user_id:
             return None
         return conversation
+
+    async def update(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+        data: ConversationUpdate,
+    ) -> Optional[Conversation]:
+        """Update a conversation (user-scoped). Validates integration_id belongs to user if provided."""
+        conversation = await self.get(conversation_id, user_id)
+        if not conversation:
+            return None
+        if data.title is not None:
+            conversation.title = data.title
+        if data.integration_id is not None:
+            integration = await self.integration_repository.get_by_id(data.integration_id)
+            if not integration or integration.user_id != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Integration not found or not owned by user",
+                )
+            conversation.integration_id = data.integration_id
+        return await self.conversation_repository.update(conversation)
+
+    async def delete(self, conversation_id: UUID, user_id: UUID) -> bool:
+        """Delete a conversation (user-scoped)."""
+        conversation = await self.get(conversation_id, user_id)
+        if not conversation:
+            return False
+        return await self.conversation_repository.delete(conversation_id)
 
     async def get_logs(
         self,

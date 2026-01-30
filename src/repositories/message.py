@@ -46,3 +46,21 @@ class MessageRepository:
             .offset(offset)
         )
         return list(result.scalars().all())
+
+    async def update(self, message: Message) -> Message:
+        """Update a message (fields already set on entity)."""
+        await self.session.commit()
+        await self.session.refresh(message)
+        return message
+
+    async def delete(self, message_id: UUID) -> bool:
+        """Delete message by ID."""
+        result = await self.session.execute(
+            select(Message).where(Message.id == message_id)
+        )
+        message = result.scalar_one_or_none()
+        if message:
+            await self.session.delete(message)
+            await self.session.commit()
+            return True
+        return False

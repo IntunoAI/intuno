@@ -14,6 +14,13 @@ class ConversationCreate(BaseModel):
     integration_id: Optional[UUID] = None
 
 
+class ConversationUpdate(BaseModel):
+    """Conversation update schema (PATCH semantics)."""
+
+    title: Optional[str] = None
+    integration_id: Optional[UUID] = None
+
+
 class ConversationResponse(BaseModel):
     """Conversation response schema."""
 

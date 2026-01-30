@@ -46,3 +46,21 @@ class ConversationRepository:
             q = q.where(Conversation.integration_id == integration_id)
         result = await self.session.execute(q)
         return list(result.scalars().all())
+
+    async def update(self, conversation: Conversation) -> Conversation:
+        """Update a conversation (fields already set on entity)."""
+        await self.session.commit()
+        await self.session.refresh(conversation)
+        return conversation
+
+    async def delete(self, conversation_id: UUID) -> bool:
+        """Delete conversation by ID."""
+        result = await self.session.execute(
+            select(Conversation).where(Conversation.id == conversation_id)
+        )
+        conversation = result.scalar_one_or_none()
+        if conversation:
+            await self.session.delete(conversation)
+            await self.session.commit()
+            return True
+        return False
