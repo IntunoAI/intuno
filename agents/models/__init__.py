@@ -1,5 +1,6 @@
-"""Expose base model only. Domain models added later."""
+"""Expose base model and domain models."""
 
 from agents.models.base import Base, BaseModel
+from agents.models.agent_config import AgentConfig
 
-__all__ = ["Base", "BaseModel"]
+__all__ = ["Base", "BaseModel", "AgentConfig"]
