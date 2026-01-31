@@ -14,6 +14,7 @@ class InvokeRequest(BaseModel):
     input: Dict[str, Any]
     conversation_id: Optional[UUID] = None
     message_id: Optional[UUID] = None
+    external_user_id: Optional[str] = None
 
 
 class InvokeResponse(BaseModel):

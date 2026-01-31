@@ -1,4 +1,4 @@
-"""Conversation routes: CRUD, logs, and message list/create."""
+"""Conversation routes: read-only (list, get, update, delete, logs, message list). Creation is internal (broker/orchestrator)."""
 
 from typing import List
 from uuid import UUID
@@ -9,37 +9,16 @@ from src.core.auth import get_current_user
 from src.exceptions import NotFoundException
 from src.models.auth import User
 from src.schemas.conversation import (
-    ConversationCreate,
     ConversationListResponse,
     ConversationResponse,
     ConversationUpdate,
 )
 from src.schemas.invocation_log import InvocationLogResponse
-from src.schemas.message import MessageCreate, MessageListResponse, MessageResponse
+from src.schemas.message import MessageListResponse
 from src.services.conversation import ConversationService
 from src.services.message import MessageService
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
-
-
-@router.post(
-    "",
-    response_model=ConversationResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_conversation(
-    data: ConversationCreate,
-    current_user: User = Depends(get_current_user),
-    conversation_service: ConversationService = Depends(),
-) -> ConversationResponse:
-    """
-    Create a new conversation (optional title and integration_id).
-    :param data: ConversationCreate
-    :param current_user: User
-    :param conversation_service: ConversationService
-    :return: ConversationResponse
-    """
-    return await conversation_service.create(current_user.id, data)
 
 
 @router.get(
@@ -49,16 +28,20 @@ async def create_conversation(
 async def list_conversations(
     current_user: User = Depends(get_current_user),
     integration_id: UUID | None = Query(default=None),
+    external_user_id: str | None = Query(default=None),
     conversation_service: ConversationService = Depends(),
 ) -> List[ConversationListResponse]:
     """
-    List conversations for the current user (optional filter by integration_id).
+    List conversations for the current user (optional filter by integration_id, external_user_id).
     :param current_user: User
     :param integration_id: Optional[UUID]
+    :param external_user_id: Optional client end-user id for audit filter
     :param conversation_service: ConversationService
     :return: List[ConversationListResponse]
     """
-    conversations = await conversation_service.list(current_user.id, integration_id)
+    conversations = await conversation_service.list(
+        current_user.id, integration_id, external_user_id
+    )
     return conversations
 
 
@@ -174,27 +157,3 @@ async def list_conversation_messages(
         conversation_id, current_user.id, limit=limit, offset=offset
     )
     return messages
-
-
-@router.post(
-    "/{conversation_id}/messages",
-    response_model=MessageResponse,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_message(
-    conversation_id: UUID,
-    data: MessageCreate,
-    current_user: User = Depends(get_current_user),
-    message_service: MessageService = Depends(),
-) -> MessageResponse:
-    """Add a message to this conversation (user-scoped).
-    :param conversation_id: UUID
-    :param data: MessageCreate
-    :param current_user: User
-    :param message_service: MessageService
-    :return: MessageResponse
-    """
-    message = await message_service.create(
-        conversation_id, current_user.id, data
-    )
-    return message

@@ -35,6 +35,7 @@ class Task(BaseModel):
     message_id: Column[Optional[UUID]] = Column(
         PostgresUUID, ForeignKey("messages.id"), nullable=True
     )
+    external_user_id: Column[Optional[str]] = Column(String(255), nullable=True)
     idempotency_key: Column[Optional[str]] = Column(String(255), nullable=True, unique=True)
     steps: Column[Optional[List[Dict[str, Any]]]] = Column(JSONB, nullable=True)
 

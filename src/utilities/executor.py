@@ -18,6 +18,7 @@ class ExecutorContext:
     integration_id: Optional[UUID]
     conversation_id: Optional[UUID]
     message_id: Optional[UUID]
+    external_user_id: Optional[str] = None
     fallback_agent_id: Optional[str]
     fallback_capability_id: Optional[str]
 
@@ -178,6 +179,7 @@ class Executor:
             input=step_input,
             conversation_id=context.conversation_id,
             message_id=context.message_id,
+            external_user_id=context.external_user_id,
         )
         response: InvokeResponse = await self.broker_service.invoke_agent(
             invoke_request,

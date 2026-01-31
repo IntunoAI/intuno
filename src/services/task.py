@@ -107,6 +107,7 @@ class TaskService:
             input=data.input,
             conversation_id=data.conversation_id,
             message_id=data.message_id,
+            external_user_id=data.external_user_id,
             idempotency_key=idempotency_key,
         )
         task = await self.task_repository.create(task)
@@ -126,6 +127,7 @@ class TaskService:
             integration_id=integration_id,
             conversation_id=data.conversation_id,
             message_id=data.message_id,
+            external_user_id=data.external_user_id,
             task_timeout_seconds=settings.TASK_TIMEOUT_SECONDS,
             fallback_agent_id=settings.ORCHESTRATOR_FALLBACK_AGENT_ID,
             fallback_capability_id=settings.ORCHESTRATOR_FALLBACK_CAPABILITY_ID,
@@ -209,6 +211,7 @@ async def run_task_background(task_id: UUID) -> None:
             integration_id=task.integration_id,
             conversation_id=task.conversation_id,
             message_id=task.message_id,
+            external_user_id=task.external_user_id,
             task_timeout_seconds=settings.TASK_TIMEOUT_SECONDS,
             fallback_agent_id=settings.ORCHESTRATOR_FALLBACK_AGENT_ID,
             fallback_capability_id=settings.ORCHESTRATOR_FALLBACK_CAPABILITY_ID,

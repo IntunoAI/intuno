@@ -15,14 +15,6 @@ class MessageCreate(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
-class MessageUpdate(BaseModel):
-    """Message update schema (PATCH semantics)."""
-
-    role: Optional[str] = None
-    content: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-
-
 def _message_orm_to_dict(obj: Any) -> Dict[str, Any]:
     """Build dict from Message ORM (metadata_ -> metadata) for response validation."""
     return {

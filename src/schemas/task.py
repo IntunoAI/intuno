@@ -14,6 +14,7 @@ class TaskCreate(BaseModel):
     input: Dict[str, Any] = {}
     conversation_id: Optional[UUID] = None
     message_id: Optional[UUID] = None
+    external_user_id: Optional[str] = None
 
 
 class StepSchema(BaseModel):
@@ -40,6 +41,7 @@ class TaskResponse(BaseModel):
     error_message: Optional[str] = None
     conversation_id: Optional[UUID] = None
     message_id: Optional[UUID] = None
+    external_user_id: Optional[str] = None
     steps: Optional[List[Dict[str, Any]]] = None
     created_at: datetime
     updated_at: datetime
@@ -55,5 +57,6 @@ class TaskListResponse(BaseModel):
     integration_id: Optional[UUID] = None
     status: str
     goal: str
+    external_user_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime

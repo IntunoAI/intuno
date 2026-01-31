@@ -17,9 +17,10 @@ class OrchestratorContext:
     integration_id: Optional[UUID]
     conversation_id: Optional[UUID]
     message_id: Optional[UUID]
+    external_user_id: Optional[str] = None
     task_timeout_seconds: int
-    fallback_agent_id: Optional[str]
-    fallback_capability_id: Optional[str]
+    fallback_agent_id: Optional[str] = None
+    fallback_capability_id: Optional[str] = None
     on_step_progress: Optional[Callable[[List[Dict[str, Any]]], None]] = None
 
 
@@ -89,6 +90,7 @@ class Orchestrator:
             integration_id=context.integration_id,
             conversation_id=context.conversation_id,
             message_id=context.message_id,
+            external_user_id=context.external_user_id,
             fallback_agent_id=context.fallback_agent_id,
             fallback_capability_id=context.fallback_capability_id,
         )

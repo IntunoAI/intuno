@@ -61,16 +61,6 @@ class MessageRepository:
         )
         return list(result.scalars().all())
 
-    async def update(self, message: Message) -> Message:
-        """
-        Update a message (fields already set on entity).
-        :param message: Message
-        :return: Message
-        """
-        await self.session.commit()
-        await self.session.refresh(message)
-        return message
-
     async def delete(self, message_id: UUID) -> bool:
         """
         Delete message by ID.

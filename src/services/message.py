@@ -9,7 +9,7 @@ from src.exceptions import NotFoundException
 from src.models.message import Message
 from src.repositories.conversation import ConversationRepository
 from src.repositories.message import MessageRepository
-from src.schemas.message import MessageCreate, MessageUpdate
+from src.schemas.message import MessageCreate
 
 
 class MessageService:
@@ -70,25 +70,6 @@ class MessageService:
         if not message or message.conversation_id != conversation_id:
             return None
         return message
-
-    async def update(
-        self,
-        conversation_id: UUID,
-        message_id: UUID,
-        user_id: UUID,
-        data: MessageUpdate,
-    ) -> Optional[Message]:
-        """Update a message (user-scoped via conversation ownership)."""
-        message = await self.get(conversation_id, message_id, user_id)
-        if not message:
-            return None
-        if data.role is not None:
-            message.role = data.role
-        if data.content is not None:
-            message.content = data.content
-        if data.metadata is not None:
-            message.metadata_ = data.metadata
-        return await self.message_repository.update(message)
 
     async def delete(
         self,

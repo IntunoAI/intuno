@@ -30,6 +30,7 @@ class ConversationResponse(BaseModel):
     user_id: UUID
     integration_id: Optional[UUID] = None
     title: Optional[str] = None
+    external_user_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -43,5 +44,6 @@ class ConversationListResponse(BaseModel):
     user_id: UUID
     integration_id: Optional[UUID] = None
     title: Optional[str] = None
+    external_user_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime

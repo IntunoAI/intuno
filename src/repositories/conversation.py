@@ -43,11 +43,13 @@ class ConversationRepository:
         self,
         user_id: UUID,
         integration_id: Optional[UUID] = None,
+        external_user_id: Optional[str] = None,
     ) -> List[Conversation]:
         """
-        Get conversations for a user, optionally filtered by integration_id.
+        Get conversations for a user, optionally filtered by integration_id and external_user_id.
         :param user_id: UUID
         :param integration_id: Optional[UUID]
+        :param external_user_id: Optional[str]
         :return: List[Conversation]
         """
         q = (
@@ -57,6 +59,8 @@ class ConversationRepository:
         )
         if integration_id is not None:
             q = q.where(Conversation.integration_id == integration_id)
+        if external_user_id is not None:
+            q = q.where(Conversation.external_user_id == external_user_id)
         result = await self.session.execute(q)
         return list(result.scalars().all())
 

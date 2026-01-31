@@ -22,6 +22,8 @@ class Conversation(BaseModel):
         PostgresUUID, ForeignKey("integrations.id"), nullable=True
     )
     title: Column[Optional[str]] = Column(Text, nullable=True)
+    # Client's end-user id for auditing; set only via invoke/task, not via CRUD.
+    external_user_id: Column[Optional[str]] = Column(String(255), nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="conversations")

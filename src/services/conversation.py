@@ -44,9 +44,12 @@ class ConversationService:
         self,
         user_id: UUID,
         integration_id: Optional[UUID] = None,
+        external_user_id: Optional[str] = None,
     ) -> List[Conversation]:
-        """List conversations for the user, optionally filtered by integration_id."""
-        return await self.conversation_repository.get_by_user_id(user_id, integration_id)
+        """List conversations for the user, optionally filtered by integration_id and external_user_id."""
+        return await self.conversation_repository.get_by_user_id(
+            user_id, integration_id, external_user_id
+        )
 
     async def get(self, conversation_id: UUID, user_id: UUID) -> Optional[Conversation]:
         """Get conversation by ID if owned by user."""

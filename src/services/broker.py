@@ -9,6 +9,7 @@ from uuid import UUID
 import httpx
 from fastapi import Depends
 
+from src.models.conversation import Conversation
 from src.models.invocation_log import InvocationLog
 from src.repositories.broker import BrokerConfigRepository
 from src.repositories.conversation import ConversationRepository
@@ -80,6 +81,19 @@ class BrokerService:
                     latency_ms=int((time.time() - start_time) * 1000),
                     status_code=403,
                 )
+            if invoke_request.external_user_id is not None:
+                conversation.external_user_id = invoke_request.external_user_id
+                await self.conversation_repository.update(conversation)
+        else:
+            # No conversation: create one for audit so invocation log has conversation_id
+            conversation = Conversation(
+                user_id=caller_user_id,
+                integration_id=integration_id,
+                title=None,
+                external_user_id=invoke_request.external_user_id,
+            )
+            conversation = await self.conversation_repository.create(conversation)
+            conv_id = conversation.id
         if msg_id is not None:
             if conv_id is None:
                 return InvokeResponse(

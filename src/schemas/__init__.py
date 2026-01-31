@@ -33,7 +33,6 @@ from src.schemas.message import (
     MessageCreate,
     MessageListResponse,
     MessageResponse,
-    MessageUpdate,
 )
 from src.schemas.task import (
     StepSchema,
@@ -88,7 +87,6 @@ __all__ = [
     "MessageCreate",
     "MessageListResponse",
     "MessageResponse",
-    "MessageUpdate",
     # Task
     "StepSchema",
     "TaskCreate",
