@@ -6,7 +6,7 @@ from typing import Any, Callable, Dict, List, Optional
 from uuid import UUID
 
 from src.utilities.executor import Executor, ExecutorContext, StepResult
-from src.utilities.planner import StepSpec, plan
+from src.utilities.planner import StepSpec, get_plan
 
 
 @dataclass
@@ -73,7 +73,7 @@ class Orchestrator:
         :param context: OrchestratorContext
         :return: OrchestratorResult
         """
-        steps_specs = plan(goal, input_data or {})
+        steps_specs = await get_plan(goal, input_data or {})
         if not steps_specs:
             return OrchestratorResult(
                 success=False,
@@ -111,6 +111,10 @@ class Orchestrator:
             steps_out.append(_step_to_dict(step_spec, "running"))
             if context.on_step_progress:
                 context.on_step_progress(steps_out)
+
+            # Pass previous step result into this step's input so later steps can use earlier outputs
+            if last_result is not None:
+                step_spec.input = {**step_spec.input, "result_from_previous_step": last_result}
 
             step_result = await self.executor.execute_step(step_spec, executor_ctx)
 

@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # LLM Enhancement Configuration
     ENABLE_LLM_ENHANCEMENT: bool = False  # Default to False for cost/latency reasons
     LLM_ENHANCEMENT_MODEL: str = "gpt-4o-mini"
+
+    # Planner: when True, use LLM to decompose goal into multiple steps; when False, single-step
+    PLANNER_USE_LLM: bool = False
+    PLANNER_LLM_MODEL: str = "gpt-4o-mini"
     
     # Embedding Configuration
     EMBEDDING_MODEL: str = "text-embedding-3-small"
