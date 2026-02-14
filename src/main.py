@@ -1,7 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from agents.routes.agent_config import router as agent_config_router
 from src.core.settings import settings
 from src.routes.auth import router as auth_router
 from src.routes.brand import router as brand_router
@@ -40,4 +42,8 @@ app.include_router(conversation_router)
 app.include_router(message_router)
 app.include_router(invocation_log_router)
 app.include_router(task_router)
-app.include_router(agent_config_router)
+
+# Demo UI: static HTML + JS served at /demo
+static_dir = Path(__file__).resolve().parent.parent / "static" / "demo"
+if static_dir.exists():
+    app.mount("/demo", StaticFiles(directory=str(static_dir), html=True), name="demo")

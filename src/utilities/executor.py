@@ -18,9 +18,9 @@ class ExecutorContext:
     integration_id: Optional[UUID]
     conversation_id: Optional[UUID]
     message_id: Optional[UUID]
-    external_user_id: Optional[str] = None
     fallback_agent_id: Optional[str]
     fallback_capability_id: Optional[str]
+    external_user_id: Optional[str] = None
 
 
 @dataclass

@@ -143,23 +143,25 @@ class QdrantService:
         if score_threshold is not None:
             search_params.score_threshold = score_threshold
 
-        results = await self.client.search(
+        response = await self.client.query_points(
             collection_name=collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit,
             query_filter=qdrant_filter,
             search_params=search_params,
+            score_threshold=score_threshold,
         )
 
-        # Convert results to list of dicts
+        # QueryResponse has .points: list of ScoredPoint with id, score, payload
+        points = getattr(response, "points", []) or []
         return [
             {
-                "id": UUID(result.id),
-                "score": result.score,
-                "distance": 2.0 * (1.0 - result.score),  # Convert similarity back to distance
-                "payload": result.payload,
+                "id": UUID(str(pt.id)),
+                "score": pt.score,
+                "distance": 2.0 * (1.0 - pt.score) if pt.score is not None else None,
+                "payload": getattr(pt, "payload", None) or {},
             }
-            for result in results
+            for pt in points
         ]
 
     async def delete_vector(self, point_id: UUID, collection_name: str = None) -> None:

@@ -17,8 +17,8 @@ class OrchestratorContext:
     integration_id: Optional[UUID]
     conversation_id: Optional[UUID]
     message_id: Optional[UUID]
-    external_user_id: Optional[str] = None
     task_timeout_seconds: int
+    external_user_id: Optional[str] = None
     fallback_agent_id: Optional[str] = None
     fallback_capability_id: Optional[str] = None
     on_step_progress: Optional[Callable[[List[Dict[str, Any]]], None]] = None
