@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     # Task (orchestrator) timeout – global task-level timeout in seconds
     TASK_TIMEOUT_SECONDS: int = 60
 
+    # Shared secret sent as X-API-Key when the broker calls agent invoke endpoints
+    AGENTS_API_KEY: str = ""
+
     # Orchestrator fallback: when discovery returns no candidates, use this agent (and optionally capability)
     ORCHESTRATOR_FALLBACK_AGENT_ID: Optional[str] = None
     ORCHESTRATOR_FALLBACK_CAPABILITY_ID: Optional[str] = None

@@ -17,6 +17,7 @@ from src.repositories.invocation_log import InvocationLogRepository
 from src.repositories.message import MessageRepository
 from src.repositories.registry import RegistryRepository
 from src.schemas.broker import InvokeRequest, InvokeResponse
+from src.core.settings import settings
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
 
@@ -174,11 +175,7 @@ class BrokerService:
                 status_code=404,
             )
 
-        # Prepare the request payload
-        request_payload = {
-            "capability_id": invoke_request.capability_id,
-            "input": invoke_request.input,
-        }
+        request_payload = invoke_request.input or {}
 
         timeout_sec = (
             float(config.request_timeout_seconds)
@@ -196,13 +193,17 @@ class BrokerService:
         for attempt in range(max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                    headers = {
+                        "Content-Type": "application/json",
+                        "User-Agent": "Intuno-Broker/1.0",
+                        "X-Intuno-Capability-Id": invoke_request.capability_id,
+                    }
+                    if settings.AGENTS_API_KEY:
+                        headers["X-API-Key"] = settings.AGENTS_API_KEY
                     response = await client.post(
                         agent.invoke_endpoint,
                         json=request_payload,
-                        headers={
-                            "Content-Type": "application/json",
-                            "User-Agent": "Intuno-Broker/1.0",
-                        },
+                        headers=headers,
                     )
                 response_status_code = response.status_code
 

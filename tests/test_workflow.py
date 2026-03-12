@@ -44,6 +44,7 @@ class WorkflowTestRunner:
         self.agent_uuid: Optional[str] = None
         self.agent_id_str: Optional[str] = None
         self.first_capability_id: Optional[str] = None
+        self.first_capability_input_schema: Optional[Dict[str, Any]] = None
 
     def _record(self, name: str, passed: bool, detail: str = ""):
         tag = PASS if passed else FAIL
@@ -169,6 +170,27 @@ class WorkflowTestRunner:
 
     # ── 4. Registry (read-only — agents already on server) ─────────────
 
+    @staticmethod
+    def _build_sample_input(input_schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Build a minimal sample input dict from a JSON Schema."""
+        if not input_schema or input_schema.get("type") != "object":
+            return {}
+        props = input_schema.get("properties", {})
+        sample: Dict[str, Any] = {}
+        for key, spec in props.items():
+            t = spec.get("type", "string")
+            if t == "number" or t == "integer":
+                sample[key] = 1
+            elif t == "boolean":
+                sample[key] = True
+            elif t == "array":
+                sample[key] = []
+            elif t == "object":
+                sample[key] = {}
+            else:
+                sample[key] = "test"
+        return sample
+
     async def test_fetch_existing_agent(self):
         """Fetch an existing agent from the registry to use in subsequent tests."""
         r = await self.client.get(
@@ -184,12 +206,14 @@ class WorkflowTestRunner:
             self.agent_id_str = first["agent_id"]
             caps = first.get("capabilities", [])
             if caps:
-                self.first_capability_id = caps[0].get("id") or caps[0].get("capability_id")
+                cap = caps[0]
+                self.first_capability_id = cap.get("id") or cap.get("capability_id")
+                self.first_capability_input_schema = cap.get("input_schema")
         self._record(
             "GET /registry/agents (fetch existing)",
             ok and len(agents) >= 1,
             f"count={len(agents)}"
-            + (f" using agent_id={self.agent_id_str}" if self.agent_id_str else " NO AGENTS FOUND"),
+            + (f" using agent_id={self.agent_id_str} cap={self.first_capability_id}" if self.agent_id_str else " NO AGENTS FOUND"),
         )
 
     async def test_list_agents(self):
@@ -273,22 +297,25 @@ class WorkflowTestRunner:
                 f"key={bool(self.personal_api_key)} agent={bool(self.agent_id_str)} cap={bool(self.first_capability_id)}",
             )
             return
+        test_input = self._build_sample_input(self.first_capability_input_schema)
         r = await self.client.post(
             "/broker/invoke",
             json={
                 "agent_id": self.agent_id_str,
                 "capability_id": self.first_capability_id,
-                "input": {"a": 7, "b": 3},
+                "input": test_input,
             },
             headers=self._api_key_headers(self.personal_api_key),
         )
         ok = r.status_code == 200
         data = r.json() if ok else {}
         success = data.get("success", False)
+        error = data.get("error")
         self._record(
             "POST /broker/invoke (personal key)",
             ok and success,
-            f"status={r.status_code} success={success} data={data.get('data')}",
+            f"status={r.status_code} success={success} data={data.get('data')}"
+            + (f" error={error}" if error else ""),
         )
 
     # ── 7. Broker invoke (multi-user, integration key + external_user_id)
@@ -300,12 +327,13 @@ class WorkflowTestRunner:
                 f"key={bool(self.integration_api_key)} agent={bool(self.agent_id_str)} cap={bool(self.first_capability_id)}",
             )
             return None
+        test_input = self._build_sample_input(self.first_capability_input_schema)
         r = await self.client.post(
             "/broker/invoke",
             json={
                 "agent_id": self.agent_id_str,
                 "capability_id": self.first_capability_id,
-                "input": {"a": 6, "b": 7},
+                "input": test_input,
                 "external_user_id": "end-user-alice",
             },
             headers=self._api_key_headers(self.integration_api_key),
@@ -314,10 +342,12 @@ class WorkflowTestRunner:
         data = r.json() if ok else {}
         success = data.get("success", False)
         conv_id = data.get("conversation_id")
+        error = data.get("error")
         self._record(
             "POST /broker/invoke (integration key + external_user_id)",
             ok and success,
-            f"status={r.status_code} success={success} data={data.get('data')} conv={conv_id}",
+            f"status={r.status_code} success={success} data={data.get('data')} conv={conv_id}"
+            + (f" error={error}" if error else ""),
         )
         return conv_id
 
@@ -416,18 +446,21 @@ class WorkflowTestRunner:
         if not self.personal_api_key:
             self._skip("POST /tasks (sync)", "no api key")
             return
+        test_input = self._build_sample_input(self.first_capability_input_schema)
         r = await self.client.post(
             "/tasks",
-            json={"goal": "Add two numbers: 50 and 25", "input": {"a": 50, "b": 25}},
+            json={"goal": "Perform a simple calculation", "input": test_input},
             headers=self._api_key_headers(self.personal_api_key),
         )
         ok = r.status_code in (200, 201)
         data = r.json() if ok else {}
         task_id = data.get("id") or data.get("task_id")
+        error = data.get("error_message") or data.get("error")
         self._record(
             "POST /tasks (sync)",
             ok,
-            f"status={r.status_code} task_id={task_id} result={data.get('result', 'N/A')}",
+            f"status={r.status_code} task_id={task_id} result={data.get('result', 'N/A')}"
+            + (f" error={error}" if error else ""),
         )
         return task_id
 
@@ -435,10 +468,11 @@ class WorkflowTestRunner:
         if not self.personal_api_key:
             self._skip("POST /tasks (async)", "no api key")
             return None
+        test_input = self._build_sample_input(self.first_capability_input_schema)
         r = await self.client.post(
             "/tasks",
             params={"async": "true"},
-            json={"goal": "Multiply two numbers: 8 and 9", "input": {"a": 8, "b": 9}},
+            json={"goal": "Perform a simple calculation async", "input": test_input},
             headers=self._api_key_headers(self.personal_api_key),
         )
         ok = r.status_code == 202
@@ -461,10 +495,12 @@ class WorkflowTestRunner:
         )
         ok = r.status_code == 200
         data = r.json() if ok else {}
+        error = data.get("error_message") or data.get("error")
         self._record(
             "GET /tasks/{id}",
             ok,
-            f"status={r.status_code} task_status={data.get('status', 'N/A')}",
+            f"status={r.status_code} task_status={data.get('status', 'N/A')}"
+            + (f" error={error}" if error else ""),
         )
 
     async def test_poll_task(self, task_id: Optional[str]):
@@ -481,10 +517,12 @@ class WorkflowTestRunner:
                 continue
             data = r.json()
             if data.get("status") in ("completed", "failed", "timeout"):
+                error = data.get("error_message") or data.get("error")
                 self._record(
                     "GET /tasks/{id} (poll)",
                     data["status"] == "completed",
-                    f"attempts={attempt + 1} status={data['status']} result={data.get('result', 'N/A')}",
+                    f"attempts={attempt + 1} status={data['status']} result={data.get('result', 'N/A')}"
+                    + (f" error={error}" if error else ""),
                 )
                 return
         self._record("GET /tasks/{id} (poll)", False, "timed out after 10 attempts")
