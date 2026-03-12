@@ -1,5 +1,6 @@
 """Broker routes: invoke only; conversation/message CRUD in conversation and message routers."""
 
+import logging
 from typing import Optional
 from uuid import UUID
 
@@ -10,6 +11,8 @@ from src.exceptions import DatabaseException
 from src.models.auth import User
 from src.schemas.broker import InvokeRequest, InvokeResponse
 from src.services.broker import BrokerService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/broker", tags=["Broker"])
 
@@ -44,5 +47,6 @@ async def invoke_agent(
         )
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
+        logger.exception("Broker invoke failed: %s", exc)
         raise DatabaseException("Broker error")

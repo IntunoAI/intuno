@@ -36,11 +36,13 @@ async def get_agent_invocation_logs(
     limit: int = Query(default=50, ge=1, le=100),
     invocation_log_service: InvocationLogService = Depends(),
 ) -> List[InvocationLogResponse]:
-    """Get invocation logs for a specific agent.
+    """Get invocation logs for a specific agent (scoped to calling user).
     :param agent_id: UUID
     :param current_user: User
     :param limit: int
     :param invocation_log_service: InvocationLogService
     :return: List[InvocationLogResponse]
     """
-    return await invocation_log_service.get_agent_invocation_logs(agent_id, limit)
+    return await invocation_log_service.get_agent_invocation_logs(
+        agent_id, current_user.id, limit
+    )

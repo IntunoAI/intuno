@@ -273,4 +273,5 @@ class BrokerService:
             error=error,
             latency_ms=latency_ms,
             status_code=response_status_code,
+            conversation_id=conv_id,
         )

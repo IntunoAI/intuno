@@ -25,13 +25,14 @@ class ExecutorContext:
 
 @dataclass
 class StepResult:
-    """Result of executing one step: success, data/error, and which agent/capability was used."""
+    """Result of executing one step: success, data/error, which agent/capability was used, and conversation."""
 
     success: bool
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     agent_id: Optional[str] = None
     capability_id: Optional[str] = None
+    conversation_id: Optional[UUID] = None
 
 
 class Executor:
@@ -194,10 +195,12 @@ class Executor:
                 data=response.data,
                 agent_id=agent_id,
                 capability_id=capability_id,
+                conversation_id=response.conversation_id,
             )
         return StepResult(
             success=False,
             error=response.error or "Agent invocation failed",
             agent_id=agent_id,
             capability_id=capability_id,
+            conversation_id=response.conversation_id,
         )

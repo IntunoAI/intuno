@@ -1,8 +1,10 @@
 """Orchestrator utility: plan then execute (sequential); task timeout; step progress."""
 
+import asyncio
+import inspect
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 from uuid import UUID
 
 from src.utilities.executor import Executor, ExecutorContext, StepResult
@@ -21,7 +23,7 @@ class OrchestratorContext:
     external_user_id: Optional[str] = None
     fallback_agent_id: Optional[str] = None
     fallback_capability_id: Optional[str] = None
-    on_step_progress: Optional[Callable[[List[Dict[str, Any]]], None]] = None
+    on_step_progress: Optional[Callable] = None
 
 
 @dataclass
@@ -58,6 +60,17 @@ class Orchestrator:
 
     def __init__(self, executor: Executor):
         self.executor = executor
+
+    @staticmethod
+    async def _notify_progress(
+        callback: Optional[Callable],
+        steps: List[Dict[str, Any]],
+    ) -> None:
+        if callback is None:
+            return
+        result = callback(steps)
+        if inspect.isawaitable(result):
+            await result
 
     async def run(
         self,
@@ -100,8 +113,7 @@ class Orchestrator:
                 steps_out.append(
                     _step_to_dict(step_spec, "pending")
                 )
-                if context.on_step_progress:
-                    context.on_step_progress(steps_out)
+                await self._notify_progress(context.on_step_progress, steps_out)
                 return OrchestratorResult(
                     success=False,
                     error_message="Task timeout exceeded.",
@@ -109,8 +121,7 @@ class Orchestrator:
                 )
 
             steps_out.append(_step_to_dict(step_spec, "running"))
-            if context.on_step_progress:
-                context.on_step_progress(steps_out)
+            await self._notify_progress(context.on_step_progress, steps_out)
 
             # Pass previous step result into this step's input so later steps can use earlier outputs
             if last_result is not None:
@@ -118,20 +129,21 @@ class Orchestrator:
 
             step_result = await self.executor.execute_step(step_spec, executor_ctx)
 
+            if step_result.conversation_id and not executor_ctx.conversation_id:
+                executor_ctx.conversation_id = step_result.conversation_id
+
             if step_result.success:
                 steps_out[-1] = _step_to_dict(step_spec, "completed", step_result)
                 last_result = step_result.data
             else:
                 steps_out[-1] = _step_to_dict(step_spec, "failed", step_result)
-                if context.on_step_progress:
-                    context.on_step_progress(steps_out)
+                await self._notify_progress(context.on_step_progress, steps_out)
                 return OrchestratorResult(
                     success=False,
                     error_message=step_result.error or "Step failed.",
                     steps=steps_out,
                 )
-            if context.on_step_progress:
-                context.on_step_progress(steps_out)
+            await self._notify_progress(context.on_step_progress, steps_out)
 
         return OrchestratorResult(
             success=True,

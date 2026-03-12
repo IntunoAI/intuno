@@ -530,15 +530,7 @@ async def semantic_discover(
             trust_verification=agent.trust_verification,
             is_active=agent.is_active,
             created_at=agent.created_at,
-            capabilities=[
-                {
-                    "id": cap.capability_id,
-                    "input_schema": cap.input_schema,
-                    "output_schema": cap.output_schema,
-                    "auth_type": {"type": cap.auth_type},
-                }
-                for cap in agent.capabilities
-            ],
+            capabilities=[CapabilitySchema.from_capability(cap) for cap in agent.capabilities],
             category=getattr(agent, "category", None),
             similarity_score=score,
             rating_avg=round(rating_aggregates.get(agent.id, (None, 0))[0], 2) if rating_aggregates.get(agent.id, (None, 0))[0] is not None else None,

@@ -28,11 +28,12 @@ class InvocationLogService:
     async def get_agent_invocation_logs(
         self,
         agent_id: UUID,
+        user_id: UUID,
         limit: int = 50,
     ) -> List[InvocationLog]:
-        """Get invocation logs for an agent."""
+        """Get invocation logs for an agent, scoped to the calling user."""
         return await self.invocation_log_repository.get_invocation_logs_by_agent_id(
-            agent_id, limit
+            agent_id, user_id, limit
         )
 
     async def get_logs_for_conversation(

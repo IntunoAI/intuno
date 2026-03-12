@@ -58,17 +58,21 @@ class InvocationLogRepository:
         return list(result.scalars().all())
 
     async def get_invocation_logs_by_agent_id(
-        self, agent_id: UUID, limit: int = 50
+        self, agent_id: UUID, user_id: UUID, limit: int = 50
     ) -> List[InvocationLog]:
         """
-        Get invocation logs for an agent.
+        Get invocation logs for an agent, scoped to the calling user.
         :param agent_id: UUID
+        :param user_id: UUID
         :param limit: int
         :return: List[InvocationLog]
         """
         result = await self.session.execute(
             select(InvocationLog)
-            .where(InvocationLog.target_agent_id == agent_id)
+            .where(
+                InvocationLog.target_agent_id == agent_id,
+                InvocationLog.caller_user_id == user_id,
+            )
             .order_by(InvocationLog.created_at.desc())
             .limit(limit)
         )
