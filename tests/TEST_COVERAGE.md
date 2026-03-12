@@ -5,7 +5,7 @@
 | File | Purpose | Tests | Status |
 |------|---------|-------|--------|
 | `test_workflow.py` | Backend API endpoint coverage (raw HTTP) | ~30 | Passing |
-| `test_sdk_integration.py` | Intuno SDK client validation (sync + async) | 9 | Partial (chat-agent compat) |
+| `test_sdk_integration.py` | Intuno SDK client validation (sync + async) | 21 | Partial (chat-agent compat) |
 | `test_user_session.py` | Multi-turn sessions, user isolation, history (OpenAI-powered) | 10 | Passing |
 | `run_all.sh` | Runner script for all three suites | — | — |
 
@@ -61,12 +61,12 @@ Prerequisites: Wisdom backend on :8000, wisdom-agents on :8001, PostgreSQL, Qdra
 
 | Endpoint | Workflow | SDK | Session | Notes |
 |----------|:--------:|:---:|:-------:|-------|
-| `GET /conversations` | ✅ | — | ✅ | Filtered by `external_user_id` |
-| `GET /conversations/{id}` | ✅ | — | ✅ | |
+| `GET /conversations` | ✅ | ✅ | ✅ | Filtered by `external_user_id` |
+| `GET /conversations/{id}` | ✅ | ✅ | ✅ | |
 | `PATCH /conversations/{id}` | — | — | — | **Missing** |
 | `DELETE /conversations/{id}` | — | — | — | **Missing** (skipped: destructive) |
 | `GET /conversations/{id}/logs` | ✅ | — | ✅ | |
-| `GET /conversations/{id}/messages` | ✅ | — | ✅ | |
+| `GET /conversations/{id}/messages` | ✅ | ✅ | ✅ | SDK: get_messages() |
 
 ### Health (`/health`) — 1 route
 
@@ -97,7 +97,7 @@ Prerequisites: Wisdom backend on :8000, wisdom-agents on :8001, PostgreSQL, Qdra
 
 | Endpoint | Workflow | SDK | Session | Notes |
 |----------|:--------:|:---:|:-------:|-------|
-| `GET .../messages/{message_id}` | — | — | — | **Missing** |
+| `GET .../messages/{message_id}` | — | ✅ | — | SDK: get_message() |
 | `DELETE .../messages/{message_id}` | — | — | — | **Missing** (skipped: destructive) |
 
 ### Registry (`/registry`) — 11 routes
@@ -106,8 +106,8 @@ Prerequisites: Wisdom backend on :8000, wisdom-agents on :8001, PostgreSQL, Qdra
 |----------|:--------:|:---:|:-------:|-------|
 | `POST /registry/agents` | — | — | — | Skipped: agents pre-registered |
 | `GET /registry/agents` | ✅ | — | ✅ | |
-| `GET /registry/agents/new` | ✅ | — | — | |
-| `GET /registry/agents/trending` | ✅ | — | — | |
+| `GET /registry/agents/new` | ✅ | ✅ | — | SDK: list_new_agents() |
+| `GET /registry/agents/trending` | ✅ | ✅ | — | SDK: list_trending_agents() |
 | `GET /registry/agents/{agent_id}` | ✅ | — | — | |
 | `PUT /registry/agents/{agent_uuid}` | — | — | — | **Missing** |
 | `DELETE /registry/agents/{agent_uuid}` | — | — | — | Skipped: destructive |

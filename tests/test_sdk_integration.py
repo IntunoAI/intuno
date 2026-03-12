@@ -31,7 +31,7 @@ if _SDK_SRC not in sys.path:
 
 from intuno_sdk.client import AsyncIntunoClient, IntunoClient
 from intuno_sdk.exceptions import IntunoError, InvocationError
-from intuno_sdk.models import Agent, InvokeResult, TaskResult
+from intuno_sdk.models import Agent, Conversation, InvokeResult, Message, TaskResult
 
 PASS = "\033[92mPASS\033[0m"
 FAIL = "\033[91mFAIL\033[0m"
@@ -67,6 +67,10 @@ class SDKTestRunner:
         self.agent_id_str: str | None = None
         self.first_cap_id: str | None = None
         self.first_cap_input: Dict[str, Any] = {}
+
+        # For conversation API tests (set after invoke with external_user_id)
+        self.conv_id: str | None = None
+        self.conv_external_user: str = "sdk-conv-api-test"
 
     def _record(self, name: str, passed: bool, detail: str = ""):
         tag = PASS if passed else FAIL
@@ -205,16 +209,17 @@ class SDKTestRunner:
                     agent_id=self.agent_id_str,
                     capability_id=self.first_cap_id,
                     input_data=self.first_cap_input,
-                    external_user_id="sdk-conv-test-user",
+                    external_user_id=self.conv_external_user,
                 )
                 conv_id = getattr(r1, "conversation_id", None)
                 if conv_id:
+                    self.conv_id = str(conv_id)
                     r2 = await client.ainvoke(
                         agent_id=self.agent_id_str,
                         capability_id=self.first_cap_id,
                         input_data=self.first_cap_input,
                         conversation_id=conv_id,
-                        external_user_id="sdk-conv-test-user",
+                        external_user_id=self.conv_external_user,
                     )
                     ok = r1.success and r2.success
                     self._record(
@@ -276,6 +281,156 @@ class SDKTestRunner:
             except Exception as e:
                 self._record("async create_task(async=true)", False, f"Error: {e}")
 
+    # ── Discovery (list_new_agents, list_trending_agents) ────────────────
+
+    def test_sync_list_new_agents(self):
+        with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                agents = client.list_new_agents(days=30, limit=10)
+                ok = isinstance(agents, list) and all(isinstance(a, Agent) for a in agents)
+                self._record("sync list_new_agents()", ok, f"found={len(agents)}")
+            except Exception as e:
+                self._record("sync list_new_agents()", False, f"Error: {e}")
+
+    def test_sync_list_trending_agents(self):
+        with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                agents = client.list_trending_agents(window_days=7, limit=10)
+                ok = isinstance(agents, list) and all(isinstance(a, Agent) for a in agents)
+                self._record("sync list_trending_agents()", ok, f"found={len(agents)}")
+            except Exception as e:
+                self._record("sync list_trending_agents()", False, f"Error: {e}")
+
+    async def test_async_list_new_agents(self):
+        async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                agents = await client.list_new_agents(days=30, limit=10)
+                ok = isinstance(agents, list) and all(isinstance(a, Agent) for a in agents)
+                self._record("async list_new_agents()", ok, f"found={len(agents)}")
+            except Exception as e:
+                self._record("async list_new_agents()", False, f"Error: {e}")
+
+    async def test_async_list_trending_agents(self):
+        async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                agents = await client.list_trending_agents(window_days=7, limit=10)
+                ok = isinstance(agents, list) and all(isinstance(a, Agent) for a in agents)
+                self._record("async list_trending_agents()", ok, f"found={len(agents)}")
+            except Exception as e:
+                self._record("async list_trending_agents()", False, f"Error: {e}")
+
+    # ── Conversation API ────────────────────────────────────────────────
+
+    def test_sync_list_conversations(self):
+        with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                conversations = client.list_conversations(external_user_id=self.conv_external_user)
+                ok = isinstance(conversations, list) and all(isinstance(c, Conversation) for c in conversations)
+                has_our_conv = self.conv_id and any(str(c.id) == self.conv_id for c in conversations)
+                self._record(
+                    "sync list_conversations()",
+                    ok and (has_our_conv if self.conv_id else True),
+                    f"found={len(conversations)} has_our_conv={has_our_conv}",
+                )
+            except Exception as e:
+                self._record("sync list_conversations()", False, f"Error: {e}")
+
+    def test_sync_get_conversation(self):
+        if not self.conv_id:
+            self._skip("sync get_conversation()", "no conversation from prior invoke")
+            return
+        with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                conv = client.get_conversation(self.conv_id)
+                ok = isinstance(conv, Conversation) and str(conv.id) == self.conv_id
+                self._record("sync get_conversation()", ok, f"id={conv.id}")
+            except Exception as e:
+                self._record("sync get_conversation()", False, f"Error: {e}")
+
+    def test_sync_get_messages(self):
+        if not self.conv_id:
+            self._skip("sync get_messages()", "no conversation from prior invoke")
+            return
+        with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                messages = client.get_messages(self.conv_id, limit=20)
+                ok = isinstance(messages, list) and all(isinstance(m, Message) for m in messages)
+                self._record("sync get_messages()", ok, f"found={len(messages)}")
+            except Exception as e:
+                self._record("sync get_messages()", False, f"Error: {e}")
+
+    def test_sync_get_message(self):
+        if not self.conv_id:
+            self._skip("sync get_message()", "no conversation from prior invoke")
+            return
+        with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                messages = client.get_messages(self.conv_id, limit=1)
+                if not messages:
+                    self._skip("sync get_message()", "no messages in conversation")
+                    return
+                msg_id = str(messages[0].id)
+                msg = client.get_message(self.conv_id, msg_id)
+                ok = isinstance(msg, Message) and str(msg.id) == msg_id
+                self._record("sync get_message()", ok, f"id={msg.id} role={msg.role}")
+            except Exception as e:
+                self._record("sync get_message()", False, f"Error: {e}")
+
+    async def test_async_list_conversations(self):
+        async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                conversations = await client.list_conversations(external_user_id=self.conv_external_user)
+                ok = isinstance(conversations, list) and all(isinstance(c, Conversation) for c in conversations)
+                has_our_conv = self.conv_id and any(str(c.id) == self.conv_id for c in conversations)
+                self._record(
+                    "async list_conversations()",
+                    ok and (has_our_conv if self.conv_id else True),
+                    f"found={len(conversations)} has_our_conv={has_our_conv}",
+                )
+            except Exception as e:
+                self._record("async list_conversations()", False, f"Error: {e}")
+
+    async def test_async_get_conversation(self):
+        if not self.conv_id:
+            self._skip("async get_conversation()", "no conversation from prior invoke")
+            return
+        async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                conv = await client.get_conversation(self.conv_id)
+                ok = isinstance(conv, Conversation) and str(conv.id) == self.conv_id
+                self._record("async get_conversation()", ok, f"id={conv.id}")
+            except Exception as e:
+                self._record("async get_conversation()", False, f"Error: {e}")
+
+    async def test_async_get_messages(self):
+        if not self.conv_id:
+            self._skip("async get_messages()", "no conversation from prior invoke")
+            return
+        async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                messages = await client.get_messages(self.conv_id, limit=20)
+                ok = isinstance(messages, list) and all(isinstance(m, Message) for m in messages)
+                self._record("async get_messages()", ok, f"found={len(messages)}")
+            except Exception as e:
+                self._record("async get_messages()", False, f"Error: {e}")
+
+    async def test_async_get_message(self):
+        if not self.conv_id:
+            self._skip("async get_message()", "no conversation from prior invoke")
+            return
+        async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
+            try:
+                messages = await client.get_messages(self.conv_id, limit=1)
+                if not messages:
+                    self._skip("async get_message()", "no messages in conversation")
+                    return
+                msg_id = str(messages[0].id)
+                msg = await client.get_message(self.conv_id, msg_id)
+                ok = isinstance(msg, Message) and str(msg.id) == msg_id
+                self._record("async get_message()", ok, f"id={msg.id} role={msg.role}")
+            except Exception as e:
+                self._record("async get_message()", False, f"Error: {e}")
+
     # ── Runner ─────────────────────────────────────────────────────────
 
     async def run_all(self):
@@ -297,9 +452,25 @@ class SDKTestRunner:
         await self.test_async_invoke(async_agents)
         await self.test_async_invoke_with_conversation()
 
+        print("\n── Discovery (new/trending) ──")
+        self.test_sync_list_new_agents()
+        self.test_sync_list_trending_agents()
+        await self.test_async_list_new_agents()
+        await self.test_async_list_trending_agents()
+
         print("\n── Task API ──")
         self.test_sync_create_task()
         await self.test_async_create_task_poll()
+
+        print("\n── Conversation API ──")
+        self.test_sync_list_conversations()
+        self.test_sync_get_conversation()
+        self.test_sync_get_messages()
+        self.test_sync_get_message()
+        await self.test_async_list_conversations()
+        await self.test_async_get_conversation()
+        await self.test_async_get_messages()
+        await self.test_async_get_message()
 
         self._print_summary()
 
