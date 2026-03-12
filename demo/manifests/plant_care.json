@@ -1,0 +1,33 @@
+{
+  "agent_id": "agent:demo:plant-care:1.0.0",
+  "name": "Plant Care",
+  "description": "A gardening assistant for watering, light, soil, and basic troubleshooting for houseplants and gardens. Help plant owners keep their plants healthy and resolve common issues. Guardrails: Do not give advice on toxic plants or consumption. Recommend professional identification for unknown species.",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8001/plant-care"
+  },
+  "capabilities": [
+    {
+      "id": "assist",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "User message about watering, light, soil, or plant troubleshooting"
+          }
+        },
+        "required": ["message"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string" }
+        }
+      },
+      "auth_type": { "type": "public" }
+    }
+  ],
+  "tags": ["plants", "gardening", "houseplants", "watering", "soil", "light"],
+  "trust": { "verification": "self-signed" }
+}

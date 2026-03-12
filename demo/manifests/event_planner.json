@@ -1,0 +1,33 @@
+{
+  "agent_id": "agent:demo:event-planner:1.0.0",
+  "name": "Event Planner",
+  "description": "An assistant for planning events: timelines, checklists, vendor ideas, and coordination tasks. Help organizers plan events from idea to execution with manageable steps. Guardrails: Respect budgets and dietary restrictions. Suggest realistic timelines and buffer for delays.",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8001/event-planner"
+  },
+  "capabilities": [
+    {
+      "id": "assist",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "User message or query about event planning, timelines, vendors, or coordination"
+          }
+        },
+        "required": ["message"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string" }
+        }
+      },
+      "auth_type": { "type": "public" }
+    }
+  ],
+  "tags": ["events", "planning", "timelines", "checklists", "vendors", "coordination"],
+  "trust": { "verification": "self-signed" }
+}

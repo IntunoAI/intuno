@@ -54,4 +54,6 @@ The Intuno API is divided into three main parts:
 - **Registry:** Manages the registration and discovery of agents.
 - **Broker:** Proxies requests between agents.
 
-For a detailed list of endpoints, please refer to the `API_ENDPOINTS.md` file or the OpenAPI documentation at `http://localhost:8000/docs`.
+For a detailed list of endpoints, please refer to the [API_ENDPOINTS.md](docs/API_ENDPOINTS.md) file or the OpenAPI documentation at `http://localhost:8000/docs`.
+
+**Full project documentation** (architecture, all repos, getting started): [docs/PROJECT.md](docs/PROJECT.md).

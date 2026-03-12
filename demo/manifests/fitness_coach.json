@@ -1,0 +1,33 @@
+{
+  "agent_id": "agent:demo:fitness-coach:1.0.0",
+  "name": "Fitness Coach",
+  "description": "A personal trainer assistant that suggests workouts, tracks goals, and adapts plans to fitness level. Help users build sustainable exercise habits and progress safely. Guardrails: Do not give medical advice. Recommend consulting a doctor for injuries or health conditions. Avoid extreme routines.",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8001/fitness-coach"
+  },
+  "capabilities": [
+    {
+      "id": "assist",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "User message about workouts, goals, fitness level, or exercise plans"
+          }
+        },
+        "required": ["message"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string" }
+        }
+      },
+      "auth_type": { "type": "public" }
+    }
+  ],
+  "tags": ["fitness", "workout", "exercise", "training", "health"],
+  "trust": { "verification": "self-signed" }
+}

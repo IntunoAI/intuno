@@ -1,0 +1,33 @@
+{
+  "agent_id": "agent:demo:budget-planner:1.0.0",
+  "name": "Budget Planner",
+  "description": "A financial assistant that helps with budgeting, saving goals, and basic money management. Help users understand spending, set savings goals, and build simple financial habits. Guardrails: Do not give tax or legal advice. Recommend professionals for complex finances. Never promise returns on investments.",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8001/budget-planner"
+  },
+  "capabilities": [
+    {
+      "id": "assist",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "User message or query about budgeting, savings, or money management"
+          }
+        },
+        "required": ["message"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string" }
+        }
+      },
+      "auth_type": { "type": "public" }
+    }
+  ],
+  "tags": ["finance", "budget", "savings", "money", "financial-planning"],
+  "trust": { "verification": "self-signed" }
+}

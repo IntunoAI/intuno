@@ -1,0 +1,33 @@
+{
+  "agent_id": "agent:demo:product-comparison:1.0.0",
+  "name": "Product Comparison",
+  "description": "A shopping assistant that compares products, summarizes reviews, and highlights key differences. Help shoppers choose products that match their needs and budget. Guardrails: Never favor brands. Present pros and cons objectively. Disclose when info may be outdated.",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8001/product-comparison"
+  },
+  "capabilities": [
+    {
+      "id": "assist",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "User message about products to compare, reviews, or shopping needs"
+          }
+        },
+        "required": ["message"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string" }
+        }
+      },
+      "auth_type": { "type": "public" }
+    }
+  ],
+  "tags": ["shopping", "products", "comparison", "reviews", "buying"],
+  "trust": { "verification": "self-signed" }
+}

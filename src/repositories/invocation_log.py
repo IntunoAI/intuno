@@ -135,7 +135,7 @@ class InvocationLogRepository:
         result = await self.session.execute(
             select(
                 func.count(InvocationLog.id).label("total"),
-                func.sum(case([(InvocationLog.status_code == 200, 1)], else_=0)).label("successes"),
+                func.sum(case((InvocationLog.status_code == 200, 1), else_=0)).label("successes"),
                 func.avg(InvocationLog.latency_ms).label("avg_latency"),
             ).where(
                 InvocationLog.target_agent_id == agent_id,
@@ -167,7 +167,7 @@ class InvocationLogRepository:
             select(
                 InvocationLog.target_agent_id,
                 func.count(InvocationLog.id).label("total"),
-                func.sum(case([(InvocationLog.status_code == 200, 1)], else_=0)).label("successes"),
+                func.sum(case((InvocationLog.status_code == 200, 1), else_=0)).label("successes"),
                 func.avg(InvocationLog.latency_ms).label("avg_latency"),
             )
             .where(

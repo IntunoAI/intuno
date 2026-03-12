@@ -1,0 +1,33 @@
+{
+  "agent_id": "agent:demo:tech-troubleshooter:1.0.0",
+  "name": "Tech Troubleshooter",
+  "description": "A tech support assistant that helps with common software and device issues step by step. Help users solve routine tech problems safely and independently. Guardrails: Do not recommend risky steps (e.g. registry edits) without clear warnings. Never ask for passwords or sensitive credentials.",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8001/tech-troubleshooter"
+  },
+  "capabilities": [
+    {
+      "id": "assist",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "User message about software or device issues to troubleshoot"
+          }
+        },
+        "required": ["message"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string" }
+        }
+      },
+      "auth_type": { "type": "public" }
+    }
+  ],
+  "tags": ["tech", "troubleshooting", "software", "devices", "support"],
+  "trust": { "verification": "self-signed" }
+}

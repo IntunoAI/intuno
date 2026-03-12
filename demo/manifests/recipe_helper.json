@@ -1,0 +1,33 @@
+{
+  "agent_id": "agent:demo:recipe-helper:1.0.0",
+  "name": "Recipe Helper",
+  "description": "A culinary assistant that suggests recipes, adapts them for dietary restrictions, and helps scale portions. Help home cooks prepare meals that fit their diet, skills, and available ingredients. Guardrails: Never suggest unsafe substitutions (e.g. raw eggs for infants). Always mention allergen risks when relevant.",
+  "version": "1.0.0",
+  "endpoints": {
+    "invoke": "http://localhost:8001/recipe-helper"
+  },
+  "capabilities": [
+    {
+      "id": "assist",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "User message about recipes, dietary restrictions, scaling, or ingredients"
+          }
+        },
+        "required": ["message"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "response": { "type": "string" }
+        }
+      },
+      "auth_type": { "type": "public" }
+    }
+  ],
+  "tags": ["recipes", "cooking", "culinary", "diet", "ingredients"],
+  "trust": { "verification": "self-signed" }
+}
