@@ -13,36 +13,44 @@ The broker calls agent invoke endpoints but has no per-agent auth mechanism. The
 ## Current State
 
 ### What the manifest declares
-- `capabilities[].auth_type`: stored as `{"type": "public"}` in the manifest, persisted as a plain string (`"public"`) in `capabilities.auth_type` column
+- `capabilities[].auth_type`: `{"type": "public"|"api_key"|"bearer_token", "header"?: "...", "scheme"?: "..."}`. Header and scheme are configurable; defaults: api_key→X-API-Key, bearer_token→Authorization + Bearer. Persisted as JSON in `capabilities.auth_type`.
 - `endpoints.invoke`: raw URL stored in `agents.invoke_endpoint`
 - `manifest_json`: the full manifest is stored as JSONB in the agents table
 
 ### What the broker does (src/services/broker.py)
 - POSTs to `agent.invoke_endpoint` with `Content-Type` and `User-Agent` headers
-- Since the recent fix: also sends a **global** `AGENTS_API_KEY` via `X-API-Key` header (from settings)
-- Does **NOT** read or act on `capability.auth_type` at all
-- Does **NOT** support per-agent credentials
+- Reads `capability.auth_type` and attaches credentials per-agent only
+- Uses per-agent credentials from `agent_credentials` table (set via `POST /registry/agents/{uuid}/credentials`)
+- No global API key; each agent must have its credential configured if `auth_type` is `api_key` or `bearer_token`
 
-### What wisdom-agents expects (agents/core/auth.py)
-- All chat endpoints require `X-API-Key` matching `AGENTS_API_KEY` env var
-- Single shared secret for all agents on that server
+### What agent servers expect
+- Chat/invoke endpoints typically validate `X-API-Key` header; the key must match the credential configured for that agent
 
-## Identified Gaps
+## Resolved
 
-1. **`auth_type` is decorative** — the capability `auth_type` field is stored but never checked or used by the broker. An agent declaring `auth_type: "oauth2"` would be invoked identically to `auth_type: "public"`.
+1. **`auth_type` enforced** — broker reads `capability.auth_type` and sends `X-API-Key` when `api_key` or `bearer_token`; returns 503 if no per-agent credential is set.
+2. **Per-agent credentials** — stored in `agent_credentials` table via `POST /registry/agents/{uuid}/credentials`.
+3. **Manifest endpoints require auth** — agent detail no longer public.
+4. **auth_type validation** — manifest validates enum: `public`, `api_key`, `bearer_token` (oauth2 deferred).
+5. **SSRF protection** — invoke_endpoint validated (private IPs blocked, optional allowlist).
 
-2. **No per-agent auth** — the `AGENTS_API_KEY` is a single global key. If agents are hosted across different servers with different credentials, there is no way to configure per-agent API keys, OAuth tokens, or other auth mechanisms.
+### Configurable auth header (credential or manifest)
 
-3. **`manifest_json` exposed publicly** — `GET /registry/agents/{agent_id}` (public, no auth) returns `manifest_json` which is the full raw manifest. If an agent owner puts sensitive data (API keys, internal URLs) in the manifest, it gets exposed. Currently manifests don't have an auth_credentials field, but the raw JSONB could contain anything.
+Header/scheme live on the credential (set via `POST /registry/agents/{uuid}/credentials` with `auth_header`, `auth_scheme`). If not set, broker falls back to manifest `auth_type.header`/`auth_type.scheme`, then defaults (api_key→X-API-Key, bearer_token→Authorization+Bearer).
 
-4. **No auth_type validation** — the manifest accepts any string for `auth_type` without validation (e.g., `"public"`, `"api_key"`, `"oauth2"`), but the broker treats them all the same.
+```json
+// When setting credential
+POST /registry/agents/{uuid}/credentials
+{
+  "credential_type": "api_key",
+  "value": "secret-key",
+  "auth_header": "X-Auth-Token",
+  "auth_scheme": ""
+}
+```
 
-5. **Invoke endpoint not validated** — the broker calls whatever URL is in `invoke_endpoint` without any allowlist, SSRF protection, or domain restriction.
+Manifest `auth_type` can still specify header/scheme as fallback when credential doesn't have them.
 
-## Suggested Future Work
+## Future Work
 
-- Define a proper `auth_type` enum: `public`, `api_key`, `oauth2`, `bearer_token`
-- Add per-agent auth config (e.g., an `agent_credentials` table or encrypted field)
-- Make the broker read `auth_type` and attach the right credential when invoking
-- Sanitize/redact `manifest_json` before returning it on public endpoints
-- Add SSRF protection for invoke_endpoint (allowlist, private IP blocking)
+- OAuth2 support when agent servers support it

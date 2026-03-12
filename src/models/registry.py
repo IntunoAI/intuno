@@ -75,6 +75,7 @@ class Agent(BaseModel):
     requirements = relationship("AgentRequirement", back_populates="agent", cascade="all, delete-orphan")
     invocation_logs = relationship("InvocationLog", back_populates="target_agent")
     ratings = relationship("AgentRating", back_populates="agent", cascade="all, delete-orphan")
+    credentials = relationship("AgentCredential", back_populates="agent", cascade="all, delete-orphan")
 
     # Indexes for performance
     __table_args__ = (
@@ -104,6 +105,27 @@ class Capability(BaseModel):
     # Indexes for performance
     __table_args__ = (
         Index("idx_capabilities_agent_capability", "agent_id", "capability_id"),
+    )
+
+
+class AgentCredential(BaseModel):
+    """Per-agent API key or bearer token for broker invoke auth."""
+
+    __tablename__: str = "agent_credentials"
+
+    agent_id: Column[UUID] = Column(
+        PostgresUUID, ForeignKey("agents.id"), nullable=False
+    )
+    credential_type: Column[str] = Column(String, nullable=False)  # api_key | bearer_token
+    encrypted_value: Column[str] = Column(Text, nullable=False)
+    auth_header: Column[Optional[str]] = Column(String, nullable=True)  # e.g. X-API-Key, Authorization
+    auth_scheme: Column[Optional[str]] = Column(String, nullable=True)  # e.g. Bearer (for Authorization header)
+
+    # Relationships
+    agent = relationship("Agent", back_populates="credentials")
+
+    __table_args__ = (
+        Index("idx_agent_credentials_agent_id", "agent_id"),
     )
 
 

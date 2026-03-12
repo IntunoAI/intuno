@@ -23,6 +23,17 @@ echo "  Backend: $BASE_URL"
 echo "============================================"
 echo ""
 
+# Inject agent credentials so broker→agent calls succeed (wisdom-agents requires X-API-Key)
+AGENTS_ENV="$ROOT_DIR/../wisdom-agents/.env"
+if [ -f "$AGENTS_ENV" ] && grep -q '^AGENTS_API_KEY=' "$AGENTS_ENV" 2>/dev/null; then
+  AGENTS_API_KEY=$(grep '^AGENTS_API_KEY=' "$AGENTS_ENV" | cut -d= -f2- | tr -d '"' | tr -d "'")
+  if [ -n "$AGENTS_API_KEY" ]; then
+    echo ">> Injecting agent credentials (from wisdom-agents .env)"
+    python scripts/inject_agent_credentials.py --api-key "$AGENTS_API_KEY" || true
+  fi
+fi
+
+echo ""
 echo ">> Backend workflow tests"
 python -m tests.test_workflow --base-url "$BASE_URL"
 

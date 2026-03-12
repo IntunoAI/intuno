@@ -6,11 +6,13 @@ from uuid import UUID
 
 from fastapi import Depends
 
+from src.core.credential_crypto import encrypt_credential
+from src.core.url_validation import validate_invoke_endpoint
 from src.repositories.brand import BrandRepository
 from src.models.registry import Agent, AgentRating, Capability, AgentRequirement
 from src.repositories.invocation_log import InvocationLogRepository
 from src.repositories.registry import RegistryRepository
-from src.schemas.registry import AgentManifest, AgentSearchQuery, DiscoverQuery
+from src.schemas.registry import AgentManifest, AgentSearchQuery, DiscoverQuery, auth_type_to_stored
 from src.utilities.embedding import EmbeddingService
 from src.utilities.qdrant_service import QdrantService
 from src.utilities.semantic_enhancement import SemanticEnhancementService
@@ -77,6 +79,13 @@ class RegistryService:
             )
             agent_embedding = await self.embedding_service.generate_embedding(agent_text)
 
+        # Validate invoke_endpoint (SSRF protection)
+        invoke_url = manifest.endpoints["invoke"]
+        allowed = [h.strip() for h in settings.INVOKE_ENDPOINT_ALLOWED_HOSTS.split(",") if h.strip()]
+        if not allowed and settings.ENVIRONMENT == "development":
+            allowed = ["localhost", "127.0.0.1"]
+        validate_invoke_endpoint(invoke_url, allowed_hosts=allowed if allowed else None)
+
         # Create agent (without embedding, will store in Qdrant)
         agent = Agent(
             agent_id=manifest.agent_id,
@@ -85,7 +94,7 @@ class RegistryService:
             name=manifest.name,
             description=manifest.description,
             version=manifest.version,
-            invoke_endpoint=manifest.endpoints["invoke"],
+            invoke_endpoint=invoke_url,
             manifest_json=manifest.model_dump(),
             tags=manifest.tags,
             category=manifest.category,
@@ -129,7 +138,7 @@ class RegistryService:
                 capability_id=cap_data.id,
                 input_schema=cap_data.input_schema,
                 output_schema=cap_data.output_schema,
-                auth_type=cap_data.auth_type.get("type", "public"),
+                auth_type=auth_type_to_stored(cap_data.auth_type),
                 qdrant_point_id=None,  # Will be set after creation
                 embedding_version=settings.EMBEDDING_VERSION,
             )
@@ -330,11 +339,18 @@ class RegistryService:
                 raise ValueError("Brand not found or you are not the owner")
             agent.brand_id = brand_id
 
+        # Validate invoke_endpoint (SSRF protection)
+        invoke_url = manifest.endpoints["invoke"]
+        allowed = [h.strip() for h in settings.INVOKE_ENDPOINT_ALLOWED_HOSTS.split(",") if h.strip()]
+        if not allowed and settings.ENVIRONMENT == "development":
+            allowed = ["localhost", "127.0.0.1"]
+        validate_invoke_endpoint(invoke_url, allowed_hosts=allowed if allowed else None)
+
         # Update agent fields
         agent.name = manifest.name
         agent.description = manifest.description
         agent.version = manifest.version
-        agent.invoke_endpoint = manifest.endpoints["invoke"]
+        agent.invoke_endpoint = invoke_url
         agent.manifest_json = manifest.model_dump()
         agent.tags = manifest.tags
         agent.category = manifest.category
@@ -390,7 +406,7 @@ class RegistryService:
                 capability_id=cap_data.id,
                 input_schema=cap_data.input_schema,
                 output_schema=cap_data.output_schema,
-                auth_type=cap_data.auth_type.get("type", "public"),
+                auth_type=auth_type_to_stored(cap_data.auth_type),
                 qdrant_point_id=None,  # Will be set after creation
                 embedding_version=settings.EMBEDDING_VERSION,
             )
@@ -442,6 +458,60 @@ class RegistryService:
             await self.registry_repository.add_requirements(new_requirements)
 
         return await self.registry_repository.update_agent(agent)
+
+    async def set_agent_credential(
+        self,
+        agent_uuid: UUID,
+        user_id: UUID,
+        credential_type: str,
+        value: str,
+        auth_header: Optional[str] = None,
+        auth_scheme: Optional[str] = None,
+    ) -> None:
+        """
+        Set or update per-agent credential (owner or brand owner only).
+        :param agent_uuid: UUID
+        :param user_id: UUID
+        :param credential_type: str (api_key | bearer_token)
+        :param value: str (plaintext; will be encrypted at rest)
+        :param auth_header: Optional header name (e.g. X-API-Key)
+        :param auth_scheme: Optional scheme (e.g. Bearer for Authorization)
+        """
+        agent = await self.registry_repository.get_agent_by_id(agent_uuid)
+        if not agent:
+            raise ValueError("Agent not found")
+        if agent.brand_id:
+            brand = await self.brand_repository.get_by_id(agent.brand_id)
+            if not brand or brand.owner_id != user_id:
+                raise ValueError("Not authorized to set credentials for this agent")
+        elif agent.user_id != user_id:
+            raise ValueError("Not authorized to set credentials for this agent")
+        encrypted = encrypt_credential(value)
+        await self.registry_repository.upsert_agent_credential(
+            agent_uuid,
+            credential_type,
+            encrypted,
+            auth_header=auth_header,
+            auth_scheme=auth_scheme,
+        )
+
+    async def delete_agent_credentials(self, agent_uuid: UUID, user_id: UUID) -> int:
+        """
+        Delete all credentials for an agent (owner or brand owner only).
+        :param agent_uuid: UUID
+        :param user_id: UUID
+        :return: int number deleted
+        """
+        agent = await self.registry_repository.get_agent_by_id(agent_uuid)
+        if not agent:
+            raise ValueError("Agent not found")
+        if agent.brand_id:
+            brand = await self.brand_repository.get_by_id(agent.brand_id)
+            if not brand or brand.owner_id != user_id:
+                raise ValueError("Not authorized to delete credentials for this agent")
+        elif agent.user_id != user_id:
+            raise ValueError("Not authorized to delete credentials for this agent")
+        return await self.registry_repository.delete_agent_credentials(agent_uuid)
 
     async def delete_agent(self, agent_uuid: UUID, user_id: UUID) -> bool:
         """

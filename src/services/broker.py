@@ -11,6 +11,7 @@ from fastapi import Depends
 
 import json
 
+from src.core.url_validation import validate_invoke_endpoint
 from src.models.conversation import Conversation
 from src.models.invocation_log import InvocationLog
 from src.models.message import Message
@@ -20,6 +21,7 @@ from src.repositories.invocation_log import InvocationLogRepository
 from src.repositories.message import MessageRepository
 from src.repositories.registry import RegistryRepository
 from src.schemas.broker import InvokeRequest, InvokeResponse
+from src.schemas.registry import parse_auth_type_stored
 from src.core.settings import settings
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
@@ -203,6 +205,20 @@ class BrokerService:
             )
             msg_id = user_message.id
 
+        # SSRF protection: validate invoke_endpoint before calling
+        try:
+            allowed = [h.strip() for h in settings.INVOKE_ENDPOINT_ALLOWED_HOSTS.split(",") if h.strip()]
+            if not allowed and settings.ENVIRONMENT == "development":
+                allowed = ["localhost", "127.0.0.1"]
+            validate_invoke_endpoint(agent.invoke_endpoint, allowed_hosts=allowed if allowed else None)
+        except ValueError as e:
+            return InvokeResponse(
+                success=False,
+                error=str(e),
+                latency_ms=int((time.time() - start_time) * 1000),
+                status_code=400,
+            )
+
         timeout_sec = (
             float(config.request_timeout_seconds)
             if config
@@ -216,6 +232,31 @@ class BrokerService:
         success = False
         error: Optional[str] = None
 
+        # Resolve auth from credential (primary) or capability auth_type (fallback)
+        # Credential stores header/scheme alongside the key; manifest auth_type is fallback
+        auth_config = parse_auth_type_stored(capability.auth_type or "public")
+        auth_type = auth_config["type"].lower()
+        cred_type = "api_key" if auth_type in ("api_key", "public") else "bearer_token"
+        cred = await self.registry_repository.get_agent_credential(agent.id, cred_type)
+        cred_value: Optional[str] = None
+        if cred:
+            try:
+                from src.core.credential_crypto import decrypt_credential
+                cred_value = decrypt_credential(cred.encrypted_value)
+            except ValueError:
+                cred_value = None
+        if auth_type in ("api_key", "bearer_token") and not cred_value:
+            return InvokeResponse(
+                success=False,
+                error="Agent requires API key; set via POST /registry/agents/{uuid}/credentials (auth_type=api_key/bearer_token)",
+                latency_ms=int((time.time() - start_time) * 1000),
+                status_code=503,
+            )
+        # Prefer credential's header/scheme; fall back to capability manifest
+        header_name = (cred.auth_header if cred and cred.auth_header else None) or auth_config.get("header", "X-API-Key")
+        scheme = (cred.auth_scheme if cred and cred.auth_scheme is not None else None) or auth_config.get("scheme", "")
+        header_value = f"{scheme} {cred_value}".strip() if (cred_value and scheme) else (cred_value or "")
+
         for attempt in range(max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=timeout_sec) as client:
@@ -224,8 +265,8 @@ class BrokerService:
                         "User-Agent": "Intuno-Broker/1.0",
                         "X-Intuno-Capability-Id": invoke_request.capability_id,
                     }
-                    if settings.AGENTS_API_KEY:
-                        headers["X-API-Key"] = settings.AGENTS_API_KEY
+                    if header_value:
+                        headers[header_name] = header_value
                     response = await client.post(
                         agent.invoke_endpoint,
                         json=request_payload,

@@ -1,8 +1,7 @@
 """Registry routes for agent management. Response building in routes via Pydantic/schema helpers.
 
-Endpoints tagged "Public" (GET /agents/{agent_id}, GET /agents/{agent_id}/ratings) require
-no authentication and are intended for showcasing agents and reviews in the frontend.
-They return only public data (no owner/brand PII).
+All registry endpoints require authentication. Agent detail and ratings are available
+to authenticated users for browsing and discovery.
 """
 
 from typing import List, Optional
@@ -20,6 +19,7 @@ from src.schemas.registry import (
     AgentSearchQuery,
     AgentUpdate,
     CapabilitySchema,
+    CredentialSetRequest,
     DiscoverQuery,
     RateRequest,
     RatingResponse,
@@ -323,17 +323,17 @@ async def rate_agent(
 @router.get(
     "/agents/{agent_id}/ratings",
     response_model=List[RatingResponse],
-    tags=["Public"],
 )
 async def list_agent_ratings(
     agent_id: str,
+    _: User = Depends(get_current_user),
     registry_service: RegistryService = Depends(),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
-    """List recent ratings for an agent (public, no auth).
+    """List recent ratings for an agent. Requires authentication.
 
-    Intended for showcasing agent reviews in the frontend. Returns score,
+    Returns score,
     optional comment, and timestamps; user_id is an opaque UUID. No authentication
     required.
     :param agent_id: str
@@ -361,15 +361,13 @@ async def list_agent_ratings(
     ]
 
 
-@router.get("/agents/{agent_id}", response_model=AgentResponse, tags=["Public"])
+@router.get("/agents/{agent_id}", response_model=AgentResponse)
 async def get_agent(
     agent_id: str,
+    _: User = Depends(get_current_user),
     registry_service: RegistryService = Depends(),
 ):
-    """Get agent details by agent_id (public, no auth).
-
-    Intended for showcasing agents in the frontend. Returns only public fields
-    (no owner/brand PII). No authentication required.
+    """Get agent details by agent_id. Requires authentication.
     :param agent_id: str
     :param registry_service: RegistryService
     :return: AgentResponse
@@ -460,6 +458,44 @@ async def update_agent(
         raise BadRequestException(str(e))
 
 
+@router.post("/agents/{agent_uuid}/credentials", status_code=status.HTTP_204_NO_CONTENT)
+async def set_agent_credential(
+    agent_uuid: UUID,
+    body: CredentialSetRequest,
+    current_user: User = Depends(get_current_user),
+    registry_service: RegistryService = Depends(),
+):
+    """Set or update per-agent API key (owner or brand owner only)."""
+    try:
+        await registry_service.set_agent_credential(
+            agent_uuid,
+            current_user.id,
+            body.credential_type,
+            body.value,
+            auth_header=body.auth_header,
+            auth_scheme=body.auth_scheme,
+        )
+    except ValueError as e:
+        if "not found" in str(e).lower():
+            raise NotFoundException(str(e))
+        raise ForbiddenException(str(e))
+
+
+@router.delete("/agents/{agent_uuid}/credentials", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_agent_credentials(
+    agent_uuid: UUID,
+    current_user: User = Depends(get_current_user),
+    registry_service: RegistryService = Depends(),
+):
+    """Delete all per-agent credentials (owner or brand owner only)."""
+    try:
+        await registry_service.delete_agent_credentials(agent_uuid, current_user.id)
+    except ValueError as e:
+        if "not found" in str(e).lower():
+            raise NotFoundException(str(e))
+        raise ForbiddenException(str(e))
+
+
 @router.delete("/agents/{agent_uuid}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(
     agent_uuid: UUID,
@@ -483,6 +519,7 @@ async def delete_agent(
 
 @router.get("/discover", response_model=List[AgentListResponse])
 async def semantic_discover(
+    _: User = Depends(get_current_user),
     query: str = Query(..., description="Natural language query for semantic search"),
     limit: int = Query(default=10, ge=1, le=50),
     similarity_threshold: Optional[float] = Query(

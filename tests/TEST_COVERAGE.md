@@ -188,6 +188,6 @@ Prerequisites: Wisdom backend on :8000, wisdom-agents on :8001, PostgreSQL, Qdra
 
 1. **SDK integration 422s**: The wisdom-agents server validates all requests through `AgentChatRequest` which only accepts `message`/`query`/`text`/`messages` fields. Non-chat agents (e.g., calculator with `{"a": number, "b": number}`) return 422. The SDK test now prefers chat-compatible agents, but the calculator path remains untestable without agent-side changes.
 
-2. **Agent auth gap**: `auth_type` in manifests is decorative. No per-agent credential mechanism exists. The broker uses a single shared `AGENTS_API_KEY` for all agents. See `.cursor/rules/broker-agent-auth-gap.mdc` for details.
+2. **Agent auth**: Per-agent credentials only. Set via `POST /registry/agents/{uuid}/credentials`. Agents with `auth_type` api_key/bearer_token must have a credential configured.
 
 3. **Conversation title**: The broker creates conversations with `title=None`. No auto-titling or first-message summary is implemented.

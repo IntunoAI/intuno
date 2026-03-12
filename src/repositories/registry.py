@@ -8,7 +8,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.models.registry import Agent, AgentRating, Capability, AgentRequirement
+from src.models.registry import Agent, AgentCredential, AgentRating, Capability, AgentRequirement
 from src.database import get_db
 from fastapi import Depends
 
@@ -482,3 +482,80 @@ class RegistryRepository:
             avg_score = float(row.avg_score) if row.avg_score is not None else None
             out[row.agent_id] = (avg_score, row.count or 0)
         return out
+
+    # --- Agent credentials (per-agent API keys for broker) ---
+
+    async def get_agent_credential(
+        self, agent_id: UUID, credential_type: str
+    ) -> Optional[AgentCredential]:
+        """
+        Get credential for an agent by type (api_key | bearer_token).
+        :param agent_id: UUID (agents.id)
+        :param credential_type: str
+        :return: Optional[AgentCredential]
+        """
+        result = await self.session.execute(
+            select(AgentCredential).where(
+                AgentCredential.agent_id == agent_id,
+                AgentCredential.credential_type == credential_type,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert_agent_credential(
+        self,
+        agent_id: UUID,
+        credential_type: str,
+        encrypted_value: str,
+        auth_header: Optional[str] = None,
+        auth_scheme: Optional[str] = None,
+    ) -> AgentCredential:
+        """
+        Set or update credential for an agent. One credential per (agent_id, type).
+        :param agent_id: UUID
+        :param credential_type: str (api_key | bearer_token)
+        :param encrypted_value: str
+        :param auth_header: Optional header name (e.g. X-API-Key)
+        :param auth_scheme: Optional scheme (e.g. Bearer for Authorization)
+        :return: AgentCredential
+        """
+        result = await self.session.execute(
+            select(AgentCredential).where(
+                AgentCredential.agent_id == agent_id,
+                AgentCredential.credential_type == credential_type,
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            existing.encrypted_value = encrypted_value
+            existing.auth_header = auth_header
+            existing.auth_scheme = auth_scheme
+            await self.session.commit()
+            await self.session.refresh(existing)
+            return existing
+        cred = AgentCredential(
+            agent_id=agent_id,
+            credential_type=credential_type,
+            encrypted_value=encrypted_value,
+            auth_header=auth_header,
+            auth_scheme=auth_scheme,
+        )
+        self.session.add(cred)
+        await self.session.commit()
+        await self.session.refresh(cred)
+        return cred
+
+    async def delete_agent_credentials(self, agent_id: UUID) -> int:
+        """
+        Delete all credentials for an agent.
+        :param agent_id: UUID
+        :return: int number deleted
+        """
+        result = await self.session.execute(
+            select(AgentCredential).where(AgentCredential.agent_id == agent_id)
+        )
+        creds = result.scalars().all()
+        for c in creds:
+            await self.session.delete(c)
+        await self.session.commit()
+        return len(creds)

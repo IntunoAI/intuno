@@ -1,12 +1,52 @@
 """Registry domain schemas. Response classes know how to parse ORM (CapabilitySchema.from_capability)."""
 
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from src.models.registry import AgentRequirement, Capability
+
+
+class AuthType(str, Enum):
+    """Allowed auth_type values for capabilities. oauth2 deferred."""
+
+    PUBLIC = "public"
+    API_KEY = "api_key"
+    BEARER_TOKEN = "bearer_token"
+
+
+_VALID_AUTH_TYPES = {e.value for e in AuthType}
+
+# Default header/scheme per auth type (users can override via manifest)
+_AUTH_DEFAULTS: Dict[str, Dict[str, str]] = {
+    AuthType.API_KEY.value: {"header": "X-API-Key", "scheme": ""},
+    AuthType.BEARER_TOKEN.value: {"header": "Authorization", "scheme": "Bearer"},
+    AuthType.PUBLIC.value: {"header": "X-API-Key", "scheme": ""},  # when credential sent for public
+}
+
+
+def auth_type_to_stored(auth_type: Dict[str, str]) -> str:
+    """Serialize auth_type dict to JSON string for DB storage."""
+    import json
+    return json.dumps(
+        {"type": auth_type.get("type", "public"), "header": auth_type.get("header", ""), "scheme": auth_type.get("scheme", "")}
+    )
+
+
+def normalize_auth_type(v: Dict[str, Any]) -> Dict[str, str]:
+    """Validate auth_type and apply defaults for header/scheme. Returns normalized dict."""
+    t = str(v.get("type", "public"))
+    if t not in _VALID_AUTH_TYPES:
+        raise ValueError(
+            f"auth_type must be one of {sorted(_VALID_AUTH_TYPES)}, got '{t}'"
+        )
+    defaults = _AUTH_DEFAULTS.get(t, _AUTH_DEFAULTS[AuthType.PUBLIC.value])
+    header = v.get("header") or defaults["header"]
+    scheme = v.get("scheme") if "scheme" in v else defaults["scheme"]
+    return {"type": t, "header": str(header), "scheme": str(scheme)}
 
 
 class CapabilitySchema(BaseModel):
@@ -17,15 +57,45 @@ class CapabilitySchema(BaseModel):
     output_schema: Dict[str, Any]
     auth_type: Dict[str, str]
 
+    @field_validator("auth_type")
+    @classmethod
+    def validate_auth_type(cls, v: Dict[str, str]) -> Dict[str, str]:
+        """Ensure auth_type['type'] is one of public, api_key, bearer_token. Allow optional header/scheme."""
+        return normalize_auth_type(v)
+
     @classmethod
     def from_capability(cls, cap: Capability) -> "CapabilitySchema":
-        """Build from ORM Capability (id ← capability_id, auth_type ← {"type": str})."""
+        """Build from ORM Capability (id ← capability_id, auth_type parsed from JSON or legacy string)."""
+        auth_config = parse_auth_type_stored(cap.auth_type)
         return cls(
             id=cap.capability_id,
             input_schema=cap.input_schema,
             output_schema=cap.output_schema,
-            auth_type={"type": cap.auth_type},
+            auth_type=auth_config,
         )
+
+
+def parse_auth_type_stored(stored: str) -> Dict[str, str]:
+    """Parse auth_type from DB: JSON or legacy plain string."""
+    import json
+
+    if not stored:
+        return normalize_auth_type({"type": "public"})
+    s = stored.strip()
+    if s.startswith("{"):
+        try:
+            parsed = json.loads(s)
+            data: Dict[str, str] = {"type": parsed.get("type", "public")}
+            if parsed.get("header"):
+                data["header"] = parsed["header"]
+            if "scheme" in parsed:
+                data["scheme"] = parsed["scheme"]
+            return normalize_auth_type(data)
+        except json.JSONDecodeError:
+            pass
+    # Legacy: plain type string
+    t = s if s in _VALID_AUTH_TYPES else AuthType.PUBLIC.value
+    return normalize_auth_type({"type": t})
 
 
 def requirements_from_orm(requirements: List[AgentRequirement]) -> List[Dict[str, str]]:
@@ -164,3 +234,19 @@ class AgentUpdate(BaseModel):
 
     manifest: AgentManifest
     brand_id: Optional[UUID] = None
+
+
+class CredentialSetRequest(BaseModel):
+    """Request to set per-agent credential."""
+
+    credential_type: str = Field(..., description="api_key or bearer_token")
+    value: str = Field(..., min_length=1)
+    auth_header: Optional[str] = Field(None, description="Header name, e.g. X-API-Key or Authorization")
+    auth_scheme: Optional[str] = Field(None, description="Scheme for header value, e.g. Bearer (for Authorization)")
+
+    @field_validator("credential_type")
+    @classmethod
+    def validate_credential_type(cls, v: str) -> str:
+        if v not in ("api_key", "bearer_token"):
+            raise ValueError("credential_type must be api_key or bearer_token")
+        return v

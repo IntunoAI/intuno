@@ -221,13 +221,16 @@ class WorkflowTestRunner:
         ok = r.status_code == 200 and len(r.json()) >= 1
         self._record("GET /registry/agents", ok, f"count={len(r.json()) if r.status_code == 200 else 'N/A'}")
 
-    async def test_get_agent_public(self):
+    async def test_get_agent(self):
         if not self.agent_id_str:
-            self._skip("GET /registry/agents/{agent_id} (public)", "no agent")
+            self._skip("GET /registry/agents/{agent_id}", "no agent")
             return
-        r = await self.client.get(f"/registry/agents/{self.agent_id_str}")
+        r = await self.client.get(
+            f"/registry/agents/{self.agent_id_str}",
+            headers=self._auth_headers(),
+        )
         ok = r.status_code == 200 and r.json()["agent_id"] == self.agent_id_str
-        self._record("GET /registry/agents/{agent_id} (public)", ok, f"status={r.status_code}")
+        self._record("GET /registry/agents/{agent_id}", ok, f"status={r.status_code}")
 
     async def test_my_agents(self):
         r = await self.client.get("/registry/my-agents", headers=self._auth_headers())
@@ -256,6 +259,7 @@ class WorkflowTestRunner:
         r = await self.client.get(
             "/registry/discover",
             params={"query": "calculator math add numbers", "limit": 5, "enhance_query": "false"},
+            headers=self._auth_headers(),
         )
         ok = r.status_code == 200
         agents = r.json() if ok else []
@@ -278,12 +282,15 @@ class WorkflowTestRunner:
 
     async def test_list_ratings(self):
         if not self.agent_id_str:
-            self._skip("GET /registry/agents/{id}/ratings (public)", "no agent")
+            self._skip("GET /registry/agents/{id}/ratings", "no agent")
             return
-        r = await self.client.get(f"/registry/agents/{self.agent_id_str}/ratings")
+        r = await self.client.get(
+            f"/registry/agents/{self.agent_id_str}/ratings",
+            headers=self._auth_headers(),
+        )
         ok = r.status_code == 200 and isinstance(r.json(), list)
         self._record(
-            "GET /registry/agents/{id}/ratings (public)",
+            "GET /registry/agents/{id}/ratings",
             ok,
             f"count={len(r.json()) if r.status_code == 200 else 'N/A'}",
         )
@@ -556,7 +563,7 @@ class WorkflowTestRunner:
         print("\n── Registry (existing agents) ──")
         await self.test_fetch_existing_agent()
         await self.test_list_agents()
-        await self.test_get_agent_public()
+        await self.test_get_agent()
         await self.test_my_agents()
         await self.test_new_agents()
         await self.test_trending_agents()
