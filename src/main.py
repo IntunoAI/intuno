@@ -2,7 +2,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from src.core.settings import settings
 from src.routes.auth import router as auth_router
@@ -46,8 +45,3 @@ app.include_router(task_router)
 
 # MCP server: streamable HTTP at /mcp
 app.mount("/mcp", create_mcp_app())
-
-# Demo UI: static HTML + JS served at /demo
-static_dir = Path(__file__).resolve().parent.parent / "static" / "demo"
-if static_dir.exists():
-    app.mount("/demo", StaticFiles(directory=str(static_dir), html=True), name="demo")

@@ -1,10 +1,12 @@
 """
 End-to-end workflow test script for the Wisdom backend.
 
+Assumes agents are already registered on the server — skips agent
+registration/deletion and any other destructive actions.
+
 Prerequisites:
   1. Wisdom backend running on BASE_URL (default http://localhost:8000)
-  2. Calculator demo agent running on port 8001
-     (cd demo && python -m uvicorn agents.calculator_agent:app --port 8001)
+  2. At least one agent already registered in the registry
   3. PostgreSQL + Qdrant accessible per .env
 
 Usage:
@@ -17,9 +19,8 @@ import argparse
 import asyncio
 import json
 import sys
-import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -39,13 +40,18 @@ class WorkflowTestRunner:
         self.personal_api_key: Optional[str] = None
         self.integration_id: Optional[str] = None
         self.integration_api_key: Optional[str] = None
+
         self.agent_uuid: Optional[str] = None
         self.agent_id_str: Optional[str] = None
+        self.first_capability_id: Optional[str] = None
 
     def _record(self, name: str, passed: bool, detail: str = ""):
         tag = PASS if passed else FAIL
         print(f"  [{tag}] {name}" + (f"  ({detail})" if detail else ""))
         self.results.append((name, passed, detail))
+
+    def _skip(self, name: str, reason: str = ""):
+        print(f"  [{SKIP}] {name}" + (f"  ({reason})" if reason else ""))
 
     def _auth_headers(self) -> Dict[str, str]:
         return {"Authorization": f"Bearer {self.jwt_token}"}
@@ -135,66 +141,55 @@ class WorkflowTestRunner:
         ok = r.status_code == 200 and len(r.json()) >= 1
         self._record("GET /integrations", ok, f"count={len(r.json()) if r.status_code == 200 else 'N/A'}")
 
-    # ── 4. Registry ────────────────────────────────────────────────────
-
-    async def test_register_agent(self):
-        manifest = {
-            "agent_id": f"agent:test:calc:{uuid.uuid4().hex[:6]}",
-            "name": "Test Calculator",
-            "description": "A calculator for testing",
-            "version": "1.0.0",
-            "endpoints": {"invoke": "http://localhost:8001/invoke"},
-            "capabilities": [
-                {
-                    "id": "add",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "a": {"type": "number"},
-                            "b": {"type": "number"},
-                        },
-                        "required": ["a", "b"],
-                    },
-                    "output_schema": {
-                        "type": "object",
-                        "properties": {"result": {"type": "number"}},
-                    },
-                    "auth_type": {"type": "public"},
-                },
-                {
-                    "id": "multiply",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "a": {"type": "number"},
-                            "b": {"type": "number"},
-                        },
-                        "required": ["a", "b"],
-                    },
-                    "output_schema": {
-                        "type": "object",
-                        "properties": {"result": {"type": "number"}},
-                    },
-                    "auth_type": {"type": "public"},
-                },
-            ],
-            "tags": ["math", "test"],
-            "trust": {"verification": "self-signed"},
-        }
-        r = await self.client.post(
-            "/registry/agents?enhance_manifest=false",
-            json={"manifest": manifest},
+    async def test_get_integration(self):
+        if not self.integration_id:
+            self._skip("GET /integrations/{id}", "no integration_id")
+            return
+        r = await self.client.get(
+            f"/integrations/{self.integration_id}",
             headers=self._auth_headers(),
         )
-        ok = r.status_code in (200, 201)
-        if ok:
-            data = r.json()
-            self.agent_uuid = str(data["id"])
-            self.agent_id_str = data["agent_id"]
+        ok = r.status_code == 200
+        self._record("GET /integrations/{id}", ok, f"status={r.status_code}")
+
+    async def test_list_integration_api_keys(self):
+        if not self.integration_id:
+            self._skip("GET /integrations/{id}/api-keys", "no integration_id")
+            return
+        r = await self.client.get(
+            f"/integrations/{self.integration_id}/api-keys",
+            headers=self._auth_headers(),
+        )
+        ok = r.status_code == 200 and isinstance(r.json(), list)
         self._record(
-            "POST /registry/agents",
+            "GET /integrations/{id}/api-keys",
             ok,
-            f"status={r.status_code}" + (f" agent_id={self.agent_id_str}" if ok else f" body={r.text[:200]}"),
+            f"count={len(r.json()) if r.status_code == 200 else 'N/A'}",
+        )
+
+    # ── 4. Registry (read-only — agents already on server) ─────────────
+
+    async def test_fetch_existing_agent(self):
+        """Fetch an existing agent from the registry to use in subsequent tests."""
+        r = await self.client.get(
+            "/registry/agents",
+            params={"limit": 10},
+            headers=self._auth_headers(),
+        )
+        ok = r.status_code == 200
+        agents = r.json() if ok else []
+        if agents:
+            first = agents[0]
+            self.agent_uuid = str(first["id"])
+            self.agent_id_str = first["agent_id"]
+            caps = first.get("capabilities", [])
+            if caps:
+                self.first_capability_id = caps[0].get("id") or caps[0].get("capability_id")
+        self._record(
+            "GET /registry/agents (fetch existing)",
+            ok and len(agents) >= 1,
+            f"count={len(agents)}"
+            + (f" using agent_id={self.agent_id_str}" if self.agent_id_str else " NO AGENTS FOUND"),
         )
 
     async def test_list_agents(self):
@@ -203,14 +198,35 @@ class WorkflowTestRunner:
         self._record("GET /registry/agents", ok, f"count={len(r.json()) if r.status_code == 200 else 'N/A'}")
 
     async def test_get_agent_public(self):
+        if not self.agent_id_str:
+            self._skip("GET /registry/agents/{agent_id} (public)", "no agent")
+            return
         r = await self.client.get(f"/registry/agents/{self.agent_id_str}")
         ok = r.status_code == 200 and r.json()["agent_id"] == self.agent_id_str
         self._record("GET /registry/agents/{agent_id} (public)", ok, f"status={r.status_code}")
 
     async def test_my_agents(self):
         r = await self.client.get("/registry/my-agents", headers=self._auth_headers())
-        ok = r.status_code == 200 and any(a["id"] == self.agent_uuid for a in r.json())
+        ok = r.status_code == 200 and isinstance(r.json(), list)
         self._record("GET /registry/my-agents", ok, f"count={len(r.json()) if r.status_code == 200 else 'N/A'}")
+
+    async def test_new_agents(self):
+        r = await self.client.get(
+            "/registry/agents/new",
+            params={"days": 30, "limit": 10},
+            headers=self._auth_headers(),
+        )
+        ok = r.status_code == 200 and isinstance(r.json(), list)
+        self._record("GET /registry/agents/new", ok, f"count={len(r.json()) if r.status_code == 200 else 'N/A'}")
+
+    async def test_trending_agents(self):
+        r = await self.client.get(
+            "/registry/agents/trending",
+            params={"window_days": 30, "limit": 10},
+            headers=self._auth_headers(),
+        )
+        ok = r.status_code == 200 and isinstance(r.json(), list)
+        self._record("GET /registry/agents/trending", ok, f"count={len(r.json()) if r.status_code == 200 else 'N/A'}")
 
     async def test_discover(self):
         r = await self.client.get(
@@ -219,103 +235,15 @@ class WorkflowTestRunner:
         )
         ok = r.status_code == 200
         agents = r.json() if ok else []
-        found = any(a.get("agent_id") == self.agent_id_str for a in agents)
+        found = any(a.get("agent_id") == self.agent_id_str for a in agents) if self.agent_id_str else False
         self._record("GET /registry/discover", ok, f"count={len(agents)}, found_ours={found}")
 
-    # ── 5. Broker invoke (single-user, personal key) ──────────────────
-
-    async def test_broker_invoke_personal(self):
-        """Invoke via personal API key — single-user app pattern."""
-        if not self.personal_api_key:
-            self._record("POST /broker/invoke (personal key)", False, "no key")
-            return
-        r = await self.client.post(
-            "/broker/invoke",
-            json={
-                "agent_id": self.agent_id_str,
-                "capability_id": "add",
-                "input": {"a": 7, "b": 3},
-            },
-            headers=self._api_key_headers(self.personal_api_key),
-        )
-        ok = r.status_code == 200
-        data = r.json() if ok else {}
-        success = data.get("success", False)
-        result = data.get("data", {}).get("result") if success else None
-        self._record(
-            "POST /broker/invoke (personal key)",
-            ok and success and result == 10,
-            f"status={r.status_code} success={success} result={result}",
-        )
-
-    # ── 6. Broker invoke (multi-user, integration key + external_user_id)
-
-    async def test_broker_invoke_multiuser(self):
-        """Invoke via integration API key with external_user_id — multi-user app pattern."""
-        if not self.integration_api_key:
-            self._record("POST /broker/invoke (integration key)", False, "no key")
-            return
-        r = await self.client.post(
-            "/broker/invoke",
-            json={
-                "agent_id": self.agent_id_str,
-                "capability_id": "multiply",
-                "input": {"a": 6, "b": 7},
-                "external_user_id": "end-user-alice",
-            },
-            headers=self._api_key_headers(self.integration_api_key),
-        )
-        ok = r.status_code == 200
-        data = r.json() if ok else {}
-        success = data.get("success", False)
-        result = data.get("data", {}).get("result") if success else None
-        conv_id = data.get("conversation_id")
-        self._record(
-            "POST /broker/invoke (integration key + external_user_id)",
-            ok and success and result == 42,
-            f"status={r.status_code} success={success} result={result} conv={conv_id}",
-        )
-        return conv_id
-
-    # ── 7. Conversation scoping ────────────────────────────────────────
-
-    async def test_conversations(self, expected_external_user: str = "end-user-alice"):
-        r = await self.client.get(
-            "/conversations",
-            params={"external_user_id": expected_external_user},
-            headers=self._auth_headers(),
-        )
-        ok = r.status_code == 200
-        convs = r.json() if ok else []
-        has_alice = any(c.get("external_user_id") == expected_external_user for c in convs)
-        self._record(
-            "GET /conversations?external_user_id=end-user-alice",
-            ok and has_alice,
-            f"count={len(convs)} has_alice={has_alice}",
-        )
-
-    # ── 8. Invocation logs (scoped) ───────────────────────────────────
-
-    async def test_invocation_logs(self):
-        r = await self.client.get("/broker/logs", headers=self._auth_headers())
-        ok = r.status_code == 200 and len(r.json()) >= 1
-        self._record("GET /broker/logs", ok, f"count={len(r.json()) if r.status_code == 200 else 'N/A'}")
-
-    async def test_invocation_logs_by_agent(self):
-        r = await self.client.get(
-            f"/broker/logs/agent/{self.agent_uuid}",
-            headers=self._auth_headers(),
-        )
-        ok = r.status_code == 200 and len(r.json()) >= 1
-        self._record(
-            "GET /broker/logs/agent/{id}",
-            ok,
-            f"count={len(r.json()) if r.status_code == 200 else 'N/A'}",
-        )
-
-    # ── 9. Ratings ─────────────────────────────────────────────────────
+    # ── 5. Ratings (read + write, non-destructive) ─────────────────────
 
     async def test_rate_agent(self):
+        if not self.agent_id_str:
+            self._skip("POST /registry/agents/{id}/rate", "no agent")
+            return
         r = await self.client.post(
             f"/registry/agents/{self.agent_id_str}/rate",
             json={"score": 5, "comment": "Great test agent!"},
@@ -325,19 +253,241 @@ class WorkflowTestRunner:
         self._record("POST /registry/agents/{id}/rate", ok, f"status={r.status_code}")
 
     async def test_list_ratings(self):
+        if not self.agent_id_str:
+            self._skip("GET /registry/agents/{id}/ratings (public)", "no agent")
+            return
         r = await self.client.get(f"/registry/agents/{self.agent_id_str}/ratings")
-        ok = r.status_code == 200 and len(r.json()) >= 1
-        self._record("GET /registry/agents/{id}/ratings (public)", ok, f"count={len(r.json()) if r.status_code == 200 else 'N/A'}")
+        ok = r.status_code == 200 and isinstance(r.json(), list)
+        self._record(
+            "GET /registry/agents/{id}/ratings (public)",
+            ok,
+            f"count={len(r.json()) if r.status_code == 200 else 'N/A'}",
+        )
 
-    # ── 10. Cleanup ────────────────────────────────────────────────────
+    # ── 6. Broker invoke (single-user, personal key) ──────────────────
 
-    async def test_delete_agent(self):
-        r = await self.client.delete(
-            f"/registry/agents/{self.agent_uuid}",
+    async def test_broker_invoke_personal(self):
+        if not self.personal_api_key or not self.agent_id_str or not self.first_capability_id:
+            self._skip(
+                "POST /broker/invoke (personal key)",
+                f"key={bool(self.personal_api_key)} agent={bool(self.agent_id_str)} cap={bool(self.first_capability_id)}",
+            )
+            return
+        r = await self.client.post(
+            "/broker/invoke",
+            json={
+                "agent_id": self.agent_id_str,
+                "capability_id": self.first_capability_id,
+                "input": {"a": 7, "b": 3},
+            },
+            headers=self._api_key_headers(self.personal_api_key),
+        )
+        ok = r.status_code == 200
+        data = r.json() if ok else {}
+        success = data.get("success", False)
+        self._record(
+            "POST /broker/invoke (personal key)",
+            ok and success,
+            f"status={r.status_code} success={success} data={data.get('data')}",
+        )
+
+    # ── 7. Broker invoke (multi-user, integration key + external_user_id)
+
+    async def test_broker_invoke_multiuser(self) -> Optional[str]:
+        if not self.integration_api_key or not self.agent_id_str or not self.first_capability_id:
+            self._skip(
+                "POST /broker/invoke (integration key)",
+                f"key={bool(self.integration_api_key)} agent={bool(self.agent_id_str)} cap={bool(self.first_capability_id)}",
+            )
+            return None
+        r = await self.client.post(
+            "/broker/invoke",
+            json={
+                "agent_id": self.agent_id_str,
+                "capability_id": self.first_capability_id,
+                "input": {"a": 6, "b": 7},
+                "external_user_id": "end-user-alice",
+            },
+            headers=self._api_key_headers(self.integration_api_key),
+        )
+        ok = r.status_code == 200
+        data = r.json() if ok else {}
+        success = data.get("success", False)
+        conv_id = data.get("conversation_id")
+        self._record(
+            "POST /broker/invoke (integration key + external_user_id)",
+            ok and success,
+            f"status={r.status_code} success={success} data={data.get('data')} conv={conv_id}",
+        )
+        return conv_id
+
+    # ── 8. Conversations (read-only) ──────────────────────────────────
+
+    async def test_list_conversations(self):
+        r = await self.client.get("/conversations", headers=self._auth_headers())
+        ok = r.status_code == 200 and isinstance(r.json(), list)
+        self._record(
+            "GET /conversations",
+            ok,
+            f"count={len(r.json()) if r.status_code == 200 else 'N/A'}",
+        )
+
+    async def test_list_conversations_filtered(self, expected_external_user: str = "end-user-alice"):
+        r = await self.client.get(
+            "/conversations",
+            params={"external_user_id": expected_external_user},
             headers=self._auth_headers(),
         )
-        ok = r.status_code == 204
-        self._record("DELETE /registry/agents/{uuid}", ok, f"status={r.status_code}")
+        ok = r.status_code == 200
+        convs = r.json() if ok else []
+        has_alice = any(c.get("external_user_id") == expected_external_user for c in convs)
+        self._record(
+            f"GET /conversations?external_user_id={expected_external_user}",
+            ok and has_alice,
+            f"count={len(convs)} has_user={has_alice}",
+        )
+
+    async def test_get_conversation(self, conversation_id: Optional[str]):
+        if not conversation_id:
+            self._skip("GET /conversations/{id}", "no conversation_id")
+            return
+        r = await self.client.get(
+            f"/conversations/{conversation_id}",
+            headers=self._auth_headers(),
+        )
+        ok = r.status_code == 200
+        self._record("GET /conversations/{id}", ok, f"status={r.status_code}")
+
+    async def test_conversation_logs(self, conversation_id: Optional[str]):
+        if not conversation_id:
+            self._skip("GET /conversations/{id}/logs", "no conversation_id")
+            return
+        r = await self.client.get(
+            f"/conversations/{conversation_id}/logs",
+            headers=self._auth_headers(),
+        )
+        ok = r.status_code == 200 and isinstance(r.json(), list)
+        self._record(
+            "GET /conversations/{id}/logs",
+            ok,
+            f"count={len(r.json()) if r.status_code == 200 else 'N/A'}",
+        )
+
+    async def test_conversation_messages(self, conversation_id: Optional[str]):
+        if not conversation_id:
+            self._skip("GET /conversations/{id}/messages", "no conversation_id")
+            return
+        r = await self.client.get(
+            f"/conversations/{conversation_id}/messages",
+            headers=self._auth_headers(),
+        )
+        ok = r.status_code == 200 and isinstance(r.json(), list)
+        self._record(
+            "GET /conversations/{id}/messages",
+            ok,
+            f"count={len(r.json()) if r.status_code == 200 else 'N/A'}",
+        )
+
+    # ── 9. Invocation logs ────────────────────────────────────────────
+
+    async def test_invocation_logs(self):
+        r = await self.client.get("/broker/logs", headers=self._auth_headers())
+        ok = r.status_code == 200 and isinstance(r.json(), list)
+        self._record("GET /broker/logs", ok, f"count={len(r.json()) if r.status_code == 200 else 'N/A'}")
+
+    async def test_invocation_logs_by_agent(self):
+        if not self.agent_uuid:
+            self._skip("GET /broker/logs/agent/{id}", "no agent_uuid")
+            return
+        r = await self.client.get(
+            f"/broker/logs/agent/{self.agent_uuid}",
+            headers=self._auth_headers(),
+        )
+        ok = r.status_code == 200 and isinstance(r.json(), list)
+        self._record(
+            "GET /broker/logs/agent/{id}",
+            ok,
+            f"count={len(r.json()) if r.status_code == 200 else 'N/A'}",
+        )
+
+    # ── 10. Tasks ─────────────────────────────────────────────────────
+
+    async def test_create_task_sync(self):
+        if not self.personal_api_key:
+            self._skip("POST /tasks (sync)", "no api key")
+            return
+        r = await self.client.post(
+            "/tasks",
+            json={"goal": "Add two numbers: 50 and 25", "input": {"a": 50, "b": 25}},
+            headers=self._api_key_headers(self.personal_api_key),
+        )
+        ok = r.status_code in (200, 201)
+        data = r.json() if ok else {}
+        task_id = data.get("id") or data.get("task_id")
+        self._record(
+            "POST /tasks (sync)",
+            ok,
+            f"status={r.status_code} task_id={task_id} result={data.get('result', 'N/A')}",
+        )
+        return task_id
+
+    async def test_create_task_async(self):
+        if not self.personal_api_key:
+            self._skip("POST /tasks (async)", "no api key")
+            return None
+        r = await self.client.post(
+            "/tasks",
+            params={"async": "true"},
+            json={"goal": "Multiply two numbers: 8 and 9", "input": {"a": 8, "b": 9}},
+            headers=self._api_key_headers(self.personal_api_key),
+        )
+        ok = r.status_code == 202
+        data = r.json() if ok else {}
+        task_id = data.get("task_id")
+        self._record(
+            "POST /tasks (async)",
+            ok,
+            f"status={r.status_code} task_id={task_id}",
+        )
+        return task_id
+
+    async def test_get_task(self, task_id: Optional[str]):
+        if not task_id or not self.personal_api_key:
+            self._skip("GET /tasks/{id}", "no task_id or api key")
+            return
+        r = await self.client.get(
+            f"/tasks/{task_id}",
+            headers=self._api_key_headers(self.personal_api_key),
+        )
+        ok = r.status_code == 200
+        data = r.json() if ok else {}
+        self._record(
+            "GET /tasks/{id}",
+            ok,
+            f"status={r.status_code} task_status={data.get('status', 'N/A')}",
+        )
+
+    async def test_poll_task(self, task_id: Optional[str]):
+        if not task_id or not self.personal_api_key:
+            self._skip("GET /tasks/{id} (poll)", "no task_id or api key")
+            return
+        for attempt in range(10):
+            await asyncio.sleep(1)
+            r = await self.client.get(
+                f"/tasks/{task_id}",
+                headers=self._api_key_headers(self.personal_api_key),
+            )
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            if data.get("status") in ("completed", "failed", "timeout"):
+                self._record(
+                    "GET /tasks/{id} (poll)",
+                    data["status"] == "completed",
+                    f"attempts={attempt + 1} status={data['status']} result={data.get('result', 'N/A')}",
+                )
+                return
+        self._record("GET /tasks/{id} (poll)", False, "timed out after 10 attempts")
 
     # ── Runner ─────────────────────────────────────────────────────────
 
@@ -345,6 +495,7 @@ class WorkflowTestRunner:
         print(f"\n{'='*60}")
         print(f"  Wisdom Backend Workflow Tests")
         print(f"  Target: {self.base_url}")
+        print(f"  (agent registration & destructive actions skipped)")
         print(f"{'='*60}\n")
 
         print("── Health ──")
@@ -361,33 +512,44 @@ class WorkflowTestRunner:
         await self.test_create_integration()
         await self.test_create_integration_api_key()
         await self.test_list_integrations()
+        await self.test_get_integration()
+        await self.test_list_integration_api_keys()
 
-        print("\n── Registry ──")
-        await self.test_register_agent()
+        print("\n── Registry (existing agents) ──")
+        await self.test_fetch_existing_agent()
         await self.test_list_agents()
         await self.test_get_agent_public()
         await self.test_my_agents()
+        await self.test_new_agents()
+        await self.test_trending_agents()
         await self.test_discover()
-
-        print("\n── Broker (single-user) ──")
-        await self.test_broker_invoke_personal()
-
-        print("\n── Broker (multi-user) ──")
-        await self.test_broker_invoke_multiuser()
-
-        print("\n── Conversations ──")
-        await self.test_conversations()
-
-        print("\n── Invocation Logs ──")
-        await self.test_invocation_logs()
-        await self.test_invocation_logs_by_agent()
 
         print("\n── Ratings ──")
         await self.test_rate_agent()
         await self.test_list_ratings()
 
-        print("\n── Cleanup ──")
-        await self.test_delete_agent()
+        print("\n── Broker (single-user) ──")
+        await self.test_broker_invoke_personal()
+
+        print("\n── Broker (multi-user) ──")
+        conv_id = await self.test_broker_invoke_multiuser()
+
+        print("\n── Conversations ──")
+        await self.test_list_conversations()
+        await self.test_list_conversations_filtered()
+        await self.test_get_conversation(conv_id)
+        await self.test_conversation_logs(conv_id)
+        await self.test_conversation_messages(conv_id)
+
+        print("\n── Invocation Logs ──")
+        await self.test_invocation_logs()
+        await self.test_invocation_logs_by_agent()
+
+        print("\n── Tasks ──")
+        sync_task_id = await self.test_create_task_sync()
+        await self.test_get_task(sync_task_id)
+        async_task_id = await self.test_create_task_async()
+        await self.test_poll_task(async_task_id)
 
         await self.client.aclose()
         self._print_summary()
