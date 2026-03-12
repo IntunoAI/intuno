@@ -15,6 +15,7 @@ from src.routes.invocation_log import router as invocation_log_router
 from src.routes.message import router as message_router
 from src.routes.registry import router as registry_router
 from src.routes.task import router as task_router
+from src.mcp_app import create_mcp_app
 
 app = FastAPI(
     title="Intuno",
@@ -42,6 +43,9 @@ app.include_router(conversation_router)
 app.include_router(message_router)
 app.include_router(invocation_log_router)
 app.include_router(task_router)
+
+# MCP server: streamable HTTP at /mcp
+app.mount("/mcp", create_mcp_app())
 
 # Demo UI: static HTML + JS served at /demo
 static_dir = Path(__file__).resolve().parent.parent / "static" / "demo"

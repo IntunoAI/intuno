@@ -21,6 +21,8 @@ dependencies = [
     "python-multipart>=0.0.9",
     "sqlalchemy>=2.0.42",
     "uvicorn>=0.35.0",
+    "mcp>=1.20",
+    "fastmcp>=3.1.0",
 ]
 
 [dependency-groups]
