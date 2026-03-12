@@ -77,9 +77,25 @@ class SDKTestRunner:
         print(f"  [{SKIP}] {name}" + (f"  ({reason})" if reason else ""))
 
     def _pick_agent(self, agents: List[Agent]):
-        """Extract agent_id, first capability ID, and sample input from discovered agents."""
+        """Extract agent_id, first capability ID, and sample input from discovered agents.
+
+        Prefers agents whose input_schema has a text-like field (message/query/text)
+        so the invoke payload is compatible with the wisdom-agents chat endpoint.
+        """
         if not agents:
             return
+
+        TEXT_FIELDS = {"message", "query", "text"}
+
+        for agent in agents:
+            for cap in agent.capabilities:
+                props = set(cap.input_schema.get("properties", {}).keys())
+                if props & TEXT_FIELDS:
+                    self.agent_id_str = agent.agent_id
+                    self.first_cap_id = cap.id
+                    self.first_cap_input = _build_sample_input(cap.input_schema)
+                    return
+
         agent = agents[0]
         self.agent_id_str = agent.agent_id
         if agent.capabilities:

@@ -9,8 +9,11 @@ from uuid import UUID
 import httpx
 from fastapi import Depends
 
+import json
+
 from src.models.conversation import Conversation
 from src.models.invocation_log import InvocationLog
+from src.models.message import Message
 from src.repositories.broker import BrokerConfigRepository
 from src.repositories.conversation import ConversationRepository
 from src.repositories.invocation_log import InvocationLogRepository
@@ -20,6 +23,17 @@ from src.schemas.broker import InvokeRequest, InvokeResponse
 from src.core.settings import settings
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
+
+_TEXT_KEYS = ("message", "query", "text", "content", "prompt", "input")
+
+
+def _extract_text(payload: dict) -> str:
+    """Best-effort extraction of a human-readable string from a dict payload."""
+    for key in _TEXT_KEYS:
+        val = payload.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return json.dumps(payload, default=str)
 
 
 class BrokerService:
@@ -177,6 +191,18 @@ class BrokerService:
 
         request_payload = invoke_request.input or {}
 
+        # Persist the user message
+        if msg_id is None and conv_id is not None:
+            user_message = await self.message_repository.create(
+                Message(
+                    conversation_id=conv_id,
+                    role="user",
+                    content=_extract_text(request_payload),
+                    metadata_=request_payload,
+                )
+            )
+            msg_id = user_message.id
+
         timeout_sec = (
             float(config.request_timeout_seconds)
             if config
@@ -251,6 +277,17 @@ class BrokerService:
         latency_ms = int((time.time() - start_time) * 1000)
         if response_data is None:
             response_data = {"error": error or "Unknown error"}
+
+        # Persist the assistant message on success
+        if success and conv_id is not None and response_data:
+            await self.message_repository.create(
+                Message(
+                    conversation_id=conv_id,
+                    role="assistant",
+                    content=_extract_text(response_data),
+                    metadata_=response_data,
+                )
+            )
 
         # Log the invocation
         invocation_log = InvocationLog(

@@ -31,4 +31,8 @@ echo ">> SDK integration tests"
 PYTHONPATH="$ROOT_DIR:$ROOT_DIR/../intuno_sdk" python -m tests.test_sdk_integration --base-url "$BASE_URL"
 
 echo ""
+echo ">> User session E2E tests"
+python -m tests.test_user_session --base-url "$BASE_URL"
+
+echo ""
 echo "All test suites completed."
