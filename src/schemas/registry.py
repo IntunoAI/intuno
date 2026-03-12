@@ -75,6 +75,26 @@ class CapabilitySchema(BaseModel):
         )
 
 
+class CapabilitySlimSchema(BaseModel):
+    """Capability schema for API display (id, auth_type, input/output schemas for invocation). Excludes invoke_endpoint/manifest_json at agent level."""
+
+    id: str
+    input_schema: Dict[str, Any]
+    output_schema: Dict[str, Any]
+    auth_type: Dict[str, str]
+
+    @classmethod
+    def from_capability(cls, cap: Capability) -> "CapabilitySlimSchema":
+        """Build from ORM Capability (full schema for building invoke requests; no agent-level invoke URL)."""
+        auth_config = parse_auth_type_stored(cap.auth_type)
+        return cls(
+            id=cap.capability_id,
+            input_schema=cap.input_schema,
+            output_schema=cap.output_schema,
+            auth_type=auth_config,
+        )
+
+
 def parse_auth_type_stored(stored: str) -> Dict[str, str]:
     """Parse auth_type from DB: JSON or legacy plain string."""
     import json
@@ -127,22 +147,20 @@ class RateRequest(BaseModel):
 
 
 class AgentResponse(BaseModel):
-    """Agent response schema."""
+    """Agent response schema (display-only; no invoke_endpoint or manifest_json)."""
 
     id: UUID
     agent_id: str
     name: str
     description: str
     version: str
-    invoke_endpoint: Optional[str] = None
-    manifest_json: Dict[str, Any]
     tags: List[str]
     category: Optional[str] = None
     trust_verification: str
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    capabilities: List[CapabilitySchema]
+    capabilities: List[CapabilitySlimSchema]
     requirements: Optional[List[Dict[str, str]]] = None
     rating_avg: Optional[float] = Field(default=None, description="Average user rating (1-5)")
     rating_count: int = Field(default=0, description="Number of ratings")
@@ -152,20 +170,19 @@ class AgentResponse(BaseModel):
 
 
 class AgentListResponse(BaseModel):
-    """Agent list response schema."""
+    """Agent list response schema (display-only; no invoke_endpoint or manifest_json)."""
 
     id: UUID
     agent_id: str
     name: str
     description: str
     version: str
-    invoke_endpoint: Optional[str] = None
     tags: List[str]
     category: Optional[str] = None
     trust_verification: str
     is_active: bool
     created_at: datetime
-    capabilities: List[CapabilitySchema] = []
+    capabilities: List[CapabilitySlimSchema] = []
     similarity_score: Optional[float] = Field(
         default=None,
         description="Similarity score from semantic search (lower is more similar, 0.0-2.0 for cosine distance)",
