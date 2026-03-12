@@ -20,17 +20,42 @@ import argparse
 import asyncio
 import sys
 import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import httpx
 
-sys.path.insert(0, "../intuno_sdk")
-from src.intuno_sdk.client import AsyncIntunoClient, IntunoClient
-from src.intuno_sdk.exceptions import IntunoError, InvocationError
-from src.intuno_sdk.models import Agent, InvokeResult, TaskResult
+_SDK_SRC = str(Path(__file__).resolve().parent.parent.parent / "intuno_sdk" / "src")
+if _SDK_SRC not in sys.path:
+    sys.path.insert(0, _SDK_SRC)
+
+from intuno_sdk.client import AsyncIntunoClient, IntunoClient
+from intuno_sdk.exceptions import IntunoError, InvocationError
+from intuno_sdk.models import Agent, InvokeResult, TaskResult
 
 PASS = "\033[92mPASS\033[0m"
 FAIL = "\033[91mFAIL\033[0m"
 SKIP = "\033[93mSKIP\033[0m"
+
+
+def _build_sample_input(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Build minimal sample input from a JSON Schema."""
+    if not schema or schema.get("type") != "object":
+        return {}
+    sample: Dict[str, Any] = {}
+    for key, spec in schema.get("properties", {}).items():
+        t = spec.get("type", "string")
+        if t in ("number", "integer"):
+            sample[key] = 1
+        elif t == "boolean":
+            sample[key] = True
+        elif t == "array":
+            sample[key] = []
+        elif t == "object":
+            sample[key] = {}
+        else:
+            sample[key] = "test"
+    return sample
 
 
 class SDKTestRunner:
@@ -38,7 +63,10 @@ class SDKTestRunner:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.results: list[tuple[str, bool, str]] = []
+
         self.agent_id_str: str | None = None
+        self.first_cap_id: str | None = None
+        self.first_cap_input: Dict[str, Any] = {}
 
     def _record(self, name: str, passed: bool, detail: str = ""):
         tag = PASS if passed else FAIL
@@ -48,11 +76,22 @@ class SDKTestRunner:
     def _skip(self, name: str, reason: str = ""):
         print(f"  [{SKIP}] {name}" + (f"  ({reason})" if reason else ""))
 
+    def _pick_agent(self, agents: List[Agent]):
+        """Extract agent_id, first capability ID, and sample input from discovered agents."""
+        if not agents:
+            return
+        agent = agents[0]
+        self.agent_id_str = agent.agent_id
+        if agent.capabilities:
+            cap = agent.capabilities[0]
+            self.first_cap_id = cap.id
+            self.first_cap_input = _build_sample_input(cap.input_schema)
+
     # ── Sync client tests ──────────────────────────────────────────────
 
     def test_sync_discover(self):
         with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
-            agents = client.discover(query="calculator math", limit=5)
+            agents = client.discover(query="assistant help", limit=5)
             ok = isinstance(agents, list)
             has_caps = all(isinstance(a, Agent) and len(a.capabilities) > 0 for a in agents) if agents else True
             self._record(
@@ -63,19 +102,18 @@ class SDKTestRunner:
             return agents
 
     def test_sync_invoke(self, agents: list[Agent]):
-        if not agents:
-            self._skip("sync agent.invoke()", "no agents from discover")
+        if not agents or not self.first_cap_id:
+            self._skip("sync agent.invoke()", "no agents or capabilities from discover")
             return
         agent = agents[0]
-        cap_id = agent.capabilities[0].id if agent.capabilities else None
-        if not cap_id:
-            self._skip("sync agent.invoke()", "agent has no capabilities")
-            return
 
         with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
             agent._client = client
             try:
-                result = agent.invoke(capability_name_or_id=cap_id, input_data={"a": 10, "b": 5})
+                result = agent.invoke(
+                    capability_name_or_id=self.first_cap_id,
+                    input_data=self.first_cap_input,
+                )
                 ok = isinstance(result, InvokeResult) and result.success
                 self._record(
                     "sync agent.invoke()",
@@ -88,15 +126,15 @@ class SDKTestRunner:
                 self._record("sync agent.invoke()", False, f"Error: {e}")
 
     def test_sync_invoke_with_external_user(self):
-        if not self.agent_id_str:
-            self._skip("sync invoke(external_user_id=bob)", "no agent_id")
+        if not self.agent_id_str or not self.first_cap_id:
+            self._skip("sync invoke(external_user_id=bob)", "no agent or capability")
             return
         with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
             try:
                 result = client.invoke(
                     agent_id=self.agent_id_str,
-                    capability_id="add",
-                    input_data={"a": 100, "b": 200},
+                    capability_id=self.first_cap_id,
+                    input_data=self.first_cap_input,
                     external_user_id="sdk-test-user-bob",
                 )
                 ok = isinstance(result, InvokeResult) and result.success
@@ -112,25 +150,24 @@ class SDKTestRunner:
 
     async def test_async_discover(self):
         async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
-            agents = await client.discover(query="calculator math", limit=5)
+            agents = await client.discover(query="assistant help", limit=5)
             ok = isinstance(agents, list)
             self._record("async discover()", ok, f"found={len(agents)}")
             return agents
 
     async def test_async_invoke(self, agents: list[Agent]):
-        if not agents:
-            self._skip("async agent.ainvoke()", "no agents from discover")
+        if not agents or not self.first_cap_id:
+            self._skip("async agent.ainvoke()", "no agents or capabilities from discover")
             return
         agent = agents[0]
-        cap_id = agent.capabilities[0].id if agent.capabilities else None
-        if not cap_id:
-            self._skip("async agent.ainvoke()", "agent has no capabilities")
-            return
 
         async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
             agent._client = client
             try:
-                result = await agent.ainvoke(capability_name_or_id=cap_id, input_data={"a": 20, "b": 3})
+                result = await agent.ainvoke(
+                    capability_name_or_id=self.first_cap_id,
+                    input_data=self.first_cap_input,
+                )
                 ok = isinstance(result, InvokeResult) and result.success
                 self._record(
                     "async agent.ainvoke()",
@@ -143,23 +180,23 @@ class SDKTestRunner:
                 self._record("async agent.ainvoke()", False, f"Error: {e}")
 
     async def test_async_invoke_with_conversation(self):
-        if not self.agent_id_str:
-            self._skip("async ainvoke() shared conversation", "no agent_id")
+        if not self.agent_id_str or not self.first_cap_id:
+            self._skip("async ainvoke() shared conversation", "no agent or capability")
             return
         async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
             try:
                 r1 = await client.ainvoke(
                     agent_id=self.agent_id_str,
-                    capability_id="add",
-                    input_data={"a": 1, "b": 2},
+                    capability_id=self.first_cap_id,
+                    input_data=self.first_cap_input,
                     external_user_id="sdk-conv-test-user",
                 )
                 conv_id = getattr(r1, "conversation_id", None)
                 if conv_id:
                     r2 = await client.ainvoke(
                         agent_id=self.agent_id_str,
-                        capability_id="multiply",
-                        input_data={"a": 3, "b": 4},
+                        capability_id=self.first_cap_id,
+                        input_data=self.first_cap_input,
                         conversation_id=conv_id,
                         external_user_id="sdk-conv-test-user",
                     )
@@ -174,7 +211,7 @@ class SDKTestRunner:
                     self._record(
                         "async ainvoke() shared conversation",
                         ok,
-                        f"no conversation_id returned (field may not be in InvokeResult), r1.success={r1.success}",
+                        f"no conversation_id returned, r1.success={r1.success}",
                     )
             except Exception as e:
                 self._record("async ainvoke() shared conversation", False, f"Error: {e}")
@@ -185,8 +222,8 @@ class SDKTestRunner:
         with IntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
             try:
                 result = client.create_task(
-                    goal="Add two numbers: 50 and 25",
-                    input_data={"a": 50, "b": 25},
+                    goal="Perform a simple task",
+                    input_data=self.first_cap_input,
                 )
                 ok = isinstance(result, TaskResult)
                 self._record(
@@ -201,8 +238,8 @@ class SDKTestRunner:
         async with AsyncIntunoClient(api_key=self.api_key, base_url=self.base_url) as client:
             try:
                 task = await client.create_task(
-                    goal="Multiply two numbers: 8 and 9",
-                    input_data={"a": 8, "b": 9},
+                    goal="Perform a simple async task",
+                    input_data=self.first_cap_input,
                     async_mode=True,
                 )
                 ok_created = isinstance(task, TaskResult) and task.status == "pending"
@@ -234,8 +271,8 @@ class SDKTestRunner:
 
         print("── Sync Client ──")
         agents = self.test_sync_discover()
-        if agents:
-            self.agent_id_str = agents[0].agent_id
+        self._pick_agent(agents)
+        print(f"     using agent={self.agent_id_str} cap={self.first_cap_id} input={self.first_cap_input}")
         self.test_sync_invoke(agents)
         self.test_sync_invoke_with_external_user()
 
