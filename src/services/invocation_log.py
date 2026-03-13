@@ -19,10 +19,11 @@ class InvocationLogService:
         self,
         user_id: UUID,
         limit: int = 50,
+        offset: int = 0,
     ) -> List[InvocationLog]:
         """Get invocation logs for a user."""
         return await self.invocation_log_repository.get_invocation_logs_by_user_id(
-            user_id, limit
+            user_id, limit, offset
         )
 
     async def get_agent_invocation_logs(
@@ -30,10 +31,11 @@ class InvocationLogService:
         agent_id: UUID,
         user_id: UUID,
         limit: int = 50,
+        offset: int = 0,
     ) -> List[InvocationLog]:
         """Get invocation logs for an agent, scoped to the calling user."""
         return await self.invocation_log_repository.get_invocation_logs_by_agent_id(
-            agent_id, user_id, limit
+            agent_id, user_id, limit, offset
         )
 
     async def get_logs_for_conversation(

@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # API Key Configuration
     API_KEY_LENGTH: int = 32
 
+    # Redis Configuration (for caching; empty = no cache)
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Dashboard cache TTL in seconds (0 = no cache)
+    DASHBOARD_CACHE_TTL: int = 120
+
     # Qdrant Configuration
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_API_KEY: str = ""

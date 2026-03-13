@@ -5,11 +5,13 @@ from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.database import get_db
 from src.models.invocation_log import InvocationLog
+from src.models.registry import Agent
 
 
 class InvocationLogRepository:
@@ -41,30 +43,81 @@ class InvocationLogRepository:
         return result.scalar_one_or_none()
 
     async def get_invocation_logs_by_user_id(
-        self, user_id: UUID, limit: int = 50
+        self, user_id: UUID, limit: int = 50, offset: int = 0
     ) -> List[InvocationLog]:
         """
         Get invocation logs for a user.
         :param user_id: UUID
         :param limit: int
+        :param offset: int
         :return: List[InvocationLog]
         """
         result = await self.session.execute(
             select(InvocationLog)
+            .options(selectinload(InvocationLog.target_agent))
             .where(InvocationLog.caller_user_id == user_id)
             .order_by(InvocationLog.created_at.desc())
             .limit(limit)
+            .offset(offset)
         )
         return list(result.scalars().all())
 
+    async def get_invocation_logs_for_dashboard(
+        self, user_id: UUID, limit: int = 50, offset: int = 0
+    ) -> List[InvocationLog]:
+        """
+        Get invocation logs for dashboard: invocations made BY the user OR targeting the user's agents.
+        :param user_id: UUID
+        :param limit: int
+        :param offset: int
+        :return: List[InvocationLog]
+        """
+        result = await self.session.execute(
+            select(InvocationLog)
+            .options(selectinload(InvocationLog.target_agent))
+            .join(Agent, InvocationLog.target_agent_id == Agent.id)
+            .where(
+                or_(
+                    InvocationLog.caller_user_id == user_id,
+                    Agent.user_id == user_id,
+                )
+            )
+            .order_by(InvocationLog.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.scalars().all())
+
+    async def count_invocations_for_dashboard_since(
+        self, user_id: UUID, since: datetime
+    ) -> int:
+        """
+        Count invocations for dashboard since a given time.
+        Includes invocations made BY the user OR targeting the user's agents.
+        """
+        result = await self.session.execute(
+            select(func.count(InvocationLog.id))
+            .select_from(InvocationLog)
+            .join(Agent, InvocationLog.target_agent_id == Agent.id)
+            .where(
+                or_(
+                    InvocationLog.caller_user_id == user_id,
+                    Agent.user_id == user_id,
+                ),
+                InvocationLog.created_at >= since,
+            )
+        )
+        return result.scalar() or 0
+
     async def get_invocation_logs_by_agent_id(
-        self, agent_id: UUID, user_id: UUID, limit: int = 50
+        self, agent_id: UUID, user_id: UUID, limit: int = 50, offset: int = 0
     ) -> List[InvocationLog]:
         """
         Get invocation logs for an agent, scoped to the calling user.
         :param agent_id: UUID
         :param user_id: UUID
         :param limit: int
+        :param offset: int
         :return: List[InvocationLog]
         """
         result = await self.session.execute(
@@ -75,6 +128,7 @@ class InvocationLogRepository:
             )
             .order_by(InvocationLog.created_at.desc())
             .limit(limit)
+            .offset(offset)
         )
         return list(result.scalars().all())
 
@@ -101,6 +155,60 @@ class InvocationLogRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def count_invocations_by_user_since(
+        self, user_id: UUID, since: datetime
+    ) -> int:
+        """
+        Count invocations by user since a given time.
+        :param user_id: UUID
+        :param since: datetime
+        :return: int
+        """
+        result = await self.session.execute(
+            select(func.count(InvocationLog.id)).where(
+                InvocationLog.caller_user_id == user_id,
+                InvocationLog.created_at >= since,
+            )
+        )
+        return result.scalar() or 0
+
+    async def get_hourly_aggregates(
+        self, user_id: UUID, hours: int = 24
+    ) -> List[Tuple[str, float, float]]:
+        """
+        Get hourly invocation aggregates (hour_label, avg_latency, success_rate) for last N hours.
+        Includes invocations made BY the user (caller) OR targeting the user's agents (owner).
+        :param user_id: UUID
+        :param hours: int (24, 48, or 168)
+        :return: List of (hour_label, avg_latency, success_rate)
+        """
+        if hours not in (24, 48, 168):
+            hours = 24
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        stmt = text("""
+            SELECT date_trunc('hour', il.created_at) AS hour,
+                   avg(il.latency_ms) AS avg_latency,
+                   sum(CASE WHEN il.status_code >= 200 AND il.status_code < 300 THEN 1 ELSE 0 END) AS successes,
+                   count(il.id) AS total
+            FROM invocation_logs il
+            LEFT JOIN agents a ON a.id = il.target_agent_id
+            WHERE (il.caller_user_id = :user_id OR a.user_id = :user_id)
+              AND il.created_at >= :since
+            GROUP BY date_trunc('hour', il.created_at)
+            ORDER BY 1
+        """)
+        result = await self.session.execute(stmt, {"user_id": user_id, "since": since})
+        rows = result.all()
+        out: List[Tuple[str, float, float]] = []
+        for row in rows:
+            total = row.total or 0
+            successes = row.successes or 0
+            success_rate = (successes / total * 100) if total else 0.0
+            avg_lat = float(row.avg_latency) if row.avg_latency else 0.0
+            hour_label = row.hour.strftime("%H:00") if row.hour else ""
+            out.append((hour_label, avg_lat, round(success_rate, 1)))
+        return out
 
     async def count_invocations_for_integration(
         self,
@@ -213,3 +321,108 @@ class InvocationLogRepository:
             .limit(limit)
         )
         return [(row.target_agent_id, row.invocation_count) for row in result.all()]
+
+    async def get_analytics_summary(
+        self,
+        user_id: UUID,
+        days: int = 7,
+    ) -> tuple[
+        int,
+        float,
+        int,
+        float,
+        List[Tuple[str, int, int]],
+        List[Tuple[str, float, float]],
+        List[Tuple[str, int]],
+    ]:
+        """
+        Get aggregated analytics for a user over the last N days.
+        Includes invocations made BY the user OR targeting the user's agents.
+        Returns (total, success_rate, failed, avg_latency, by_date, by_agent, by_capability).
+        """
+        since = datetime.now(timezone.utc) - timedelta(days=days)
+        base_filter = and_(
+            or_(
+                InvocationLog.caller_user_id == user_id,
+                Agent.user_id == user_id,
+            ),
+            InvocationLog.created_at >= since,
+        )
+
+        # Total, failed, success rate, avg latency
+        row = (
+            await self.session.execute(
+                select(
+                    func.count(InvocationLog.id).label("total"),
+                    func.sum(case((and_(InvocationLog.status_code >= 200, InvocationLog.status_code < 300), 1), else_=0)).label("successes"),
+                    func.avg(InvocationLog.latency_ms).label("avg_latency"),
+                )
+                .select_from(InvocationLog)
+                .join(Agent, InvocationLog.target_agent_id == Agent.id)
+                .where(base_filter)
+            )
+        ).one()
+        total = row.total or 0
+        successes = row.successes or 0
+        failed = total - successes
+        success_rate = (successes / total * 100) if total else 0.0
+        avg_latency = float(row.avg_latency) if row.avg_latency else 0.0
+
+        # By date
+        date_stmt = (
+            select(
+                func.date(InvocationLog.created_at).label("d"),
+                func.count(InvocationLog.id).label("count"),
+                func.sum(case((and_(InvocationLog.status_code >= 200, InvocationLog.status_code < 300), 0), else_=1)).label("failed"),
+            )
+            .select_from(InvocationLog)
+            .join(Agent, InvocationLog.target_agent_id == Agent.id)
+            .where(base_filter)
+            .group_by(func.date(InvocationLog.created_at))
+            .order_by(func.date(InvocationLog.created_at))
+        )
+        date_rows = (await self.session.execute(date_stmt)).all()
+        by_date = [
+            (r.d.strftime("%b %d") if r.d else "", r.count or 0, r.failed or 0)
+            for r in date_rows
+        ]
+
+        # By agent (target_agent_id) - use agent name for display
+        agent_stmt = (
+            select(
+                Agent.name,
+                func.count(InvocationLog.id).label("total"),
+                func.sum(case((and_(InvocationLog.status_code >= 200, InvocationLog.status_code < 300), 1), else_=0)).label("successes"),
+            )
+            .select_from(InvocationLog)
+            .join(Agent, InvocationLog.target_agent_id == Agent.id)
+            .where(base_filter)
+            .group_by(Agent.id, Agent.name)
+        )
+        agent_rows = (await self.session.execute(agent_stmt)).all()
+        by_agent: List[Tuple[str, float, float]] = []
+        for r in agent_rows:
+            t = r.total or 0
+            s = r.successes or 0
+            success_pct = (s / t * 100) if t else 0.0
+            fail_pct = (100 - success_pct) if t else 0.0
+            agent_name = r.name or "Unknown"
+            by_agent.append((agent_name, round(success_pct, 1), round(fail_pct, 1)))
+
+        # By capability
+        cap_stmt = (
+            select(
+                InvocationLog.capability_id,
+                func.count(InvocationLog.id).label("count"),
+            )
+            .select_from(InvocationLog)
+            .join(Agent, InvocationLog.target_agent_id == Agent.id)
+            .where(base_filter)
+            .group_by(InvocationLog.capability_id)
+            .order_by(func.count(InvocationLog.id).desc())
+            .limit(10)
+        )
+        cap_rows = (await self.session.execute(cap_stmt)).all()
+        by_capability = [(r.capability_id, r.count or 0) for r in cap_rows]
+
+        return (total, success_rate, failed, avg_latency, by_date, by_agent, by_capability)

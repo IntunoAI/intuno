@@ -18,15 +18,19 @@ router = APIRouter(prefix="/broker", tags=["InvocationLog"])
 async def get_invocation_logs(
     current_user: User = Depends(get_current_user),
     limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     invocation_log_service: InvocationLogService = Depends(),
 ) -> List[InvocationLogResponse]:
     """Get invocation logs for the current user.
     :param current_user: User
     :param limit: int
+    :param offset: int
     :param invocation_log_service: InvocationLogService
     :return: List[InvocationLogResponse]
     """
-    return await invocation_log_service.get_invocation_logs(current_user.id, limit)
+    return await invocation_log_service.get_invocation_logs(
+        current_user.id, limit, offset
+    )
 
 
 @router.get("/logs/agent/{agent_id}", response_model=List[InvocationLogResponse])
@@ -34,15 +38,17 @@ async def get_agent_invocation_logs(
     agent_id: UUID,
     current_user: User = Depends(get_current_user),
     limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     invocation_log_service: InvocationLogService = Depends(),
 ) -> List[InvocationLogResponse]:
     """Get invocation logs for a specific agent (scoped to calling user).
     :param agent_id: UUID
     :param current_user: User
     :param limit: int
+    :param offset: int
     :param invocation_log_service: InvocationLogService
     :return: List[InvocationLogResponse]
     """
     return await invocation_log_service.get_agent_invocation_logs(
-        agent_id, current_user.id, limit
+        agent_id, current_user.id, limit, offset
     )

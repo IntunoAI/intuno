@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from src.core.security import get_user_and_integration_from_api_key
+from src.core.security import get_user_and_integration
 from src.exceptions import DatabaseException
 from src.models.auth import User
 from src.schemas.broker import InvokeRequest, InvokeResponse
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/broker", tags=["Broker"])
 async def invoke_agent(
     invoke_request: InvokeRequest,
     user_and_integration: tuple[User, Optional[UUID]] = Depends(
-        get_user_and_integration_from_api_key
+        get_user_and_integration
     ),
     broker_service: BrokerService = Depends(),
 ):

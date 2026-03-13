@@ -1,9 +1,14 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.core.redis_client import close_redis, init_redis
 from src.core.settings import settings
+from src.routes.analytics import router as analytics_router
 from src.routes.auth import router as auth_router
 from src.routes.brand import router as brand_router
+from src.routes.dashboard import router as dashboard_router
 from src.routes.broker import router as broker_router
 from src.routes.conversation import router as conversation_router
 from src.routes.health import router as health_router
@@ -14,10 +19,19 @@ from src.routes.registry import router as registry_router
 from src.routes.task import router as task_router
 from src.mcp_app import create_mcp_app
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_redis()
+    yield
+    await close_redis()
+
+
 app = FastAPI(
     title="Intuno",
     description="Registry and broker for AI agent discovery and collaboration",
     version=settings.API_VERSION,
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -31,8 +45,10 @@ app.add_middleware(
 
 # Include routers (tags defined on each router)
 app.include_router(health_router)
+app.include_router(analytics_router)
 app.include_router(auth_router)
 app.include_router(brand_router)
+app.include_router(dashboard_router)
 app.include_router(integration_router)
 app.include_router(registry_router)
 app.include_router(broker_router)
