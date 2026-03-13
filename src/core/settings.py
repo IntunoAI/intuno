@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # Planner: when True, use LLM to decompose goal into multiple steps; when False, single-step
     PLANNER_USE_LLM: bool = False
     PLANNER_LLM_MODEL: str = "gpt-4o-mini"
+
+    # Brand agent: LLM for conversational responses (uses OPENAI_API_KEY)
+    BRAND_AGENT_LLM_MODEL: str = "gpt-4o-mini"
+    # Placeholder invoke URL for brand agents (never called; add to INVOKE_ENDPOINT_ALLOWED_HOSTS if needed)
+    BRAND_AGENT_PLACEHOLDER_URL: str = "https://brand-agent.internal/invoke"
     
     # Embedding Configuration
     EMBEDDING_MODEL: str = "text-embedding-3-small"

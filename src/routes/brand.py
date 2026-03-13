@@ -16,6 +16,7 @@ from src.schemas.brand import (
     VerifyBrandResponse,
 )
 from src.services.brand import BrandService
+from src.services.registry import RegistryService
 
 router = APIRouter(prefix="/brands", tags=["Brands"])
 
@@ -149,19 +150,26 @@ async def verify_brand(
     body: VerifyBrandRequest,
     current_user: User = Depends(get_current_user),
     brand_service: BrandService = Depends(),
+    registry_service: RegistryService = Depends(),
 ) -> VerifyBrandResponse:
     """
-    Submit verification code. Owner only.
+    Submit verification code. Owner only. Creates brand agent on successful verification.
     :param brand_id: UUID
     :param body: VerifyBrandRequest
     :param current_user: User
     :param brand_service: BrandService
+    :param registry_service: RegistryService
     :return: VerifyBrandResponse
     """
     try:
         brand = await brand_service.verify_code(
             brand_id, body.code, current_user.id
         )
+        if brand.verification_status == "verified":
+            try:
+                await registry_service.create_brand_agent(brand)
+            except Exception:
+                pass  # Non-blocking; brand verification succeeded
         return VerifyBrandResponse(
             success=True,
             verification_status=brand.verification_status,

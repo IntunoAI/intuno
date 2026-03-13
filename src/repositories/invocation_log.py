@@ -63,29 +63,64 @@ class InvocationLogRepository:
         return list(result.scalars().all())
 
     async def get_invocation_logs_for_dashboard(
-        self, user_id: UUID, limit: int = 50, offset: int = 0
+        self,
+        user_id: UUID,
+        limit: int = 50,
+        offset: int = 0,
+        agent_id: Optional[UUID] = None,
+        from_date: Optional[datetime] = None,
+        to_date: Optional[datetime] = None,
+        status: Optional[str] = None,
     ) -> List[InvocationLog]:
         """
         Get invocation logs for dashboard: invocations made BY the user OR targeting the user's agents.
         :param user_id: UUID
         :param limit: int
         :param offset: int
+        :param agent_id: Optional filter by target agent
+        :param from_date: Optional filter from date (inclusive)
+        :param to_date: Optional filter to date (inclusive)
+        :param status: Optional filter by status (success, error, timeout)
         :return: List[InvocationLog]
         """
-        result = await self.session.execute(
+        conditions = [
+            or_(
+                InvocationLog.caller_user_id == user_id,
+                Agent.user_id == user_id,
+            )
+        ]
+        if agent_id is not None:
+            conditions.append(InvocationLog.target_agent_id == agent_id)
+        if from_date is not None:
+            conditions.append(InvocationLog.created_at >= from_date)
+        if to_date is not None:
+            conditions.append(InvocationLog.created_at <= to_date)
+        if status is not None:
+            if status == "success":
+                conditions.append(InvocationLog.status_code >= 200)
+                conditions.append(InvocationLog.status_code < 300)
+            elif status == "error":
+                conditions.append(
+                    and_(
+                        or_(
+                            InvocationLog.status_code < 200,
+                            InvocationLog.status_code >= 300,
+                        ),
+                        ~InvocationLog.status_code.in_([408, 504]),
+                    )
+                )
+            elif status == "timeout":
+                conditions.append(InvocationLog.status_code.in_([408, 504]))
+        stmt = (
             select(InvocationLog)
             .options(selectinload(InvocationLog.target_agent))
             .join(Agent, InvocationLog.target_agent_id == Agent.id)
-            .where(
-                or_(
-                    InvocationLog.caller_user_id == user_id,
-                    Agent.user_id == user_id,
-                )
-            )
+            .where(and_(*conditions))
             .order_by(InvocationLog.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def count_invocations_for_dashboard_since(
@@ -122,6 +157,7 @@ class InvocationLogRepository:
         """
         result = await self.session.execute(
             select(InvocationLog)
+            .options(selectinload(InvocationLog.target_agent))
             .where(
                 InvocationLog.target_agent_id == agent_id,
                 InvocationLog.caller_user_id == user_id,

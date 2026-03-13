@@ -644,6 +644,110 @@ class RegistryService:
             agent_uuids, window_days=window_days
         )
 
+    async def create_brand_agent(self, brand: "Brand") -> Optional[Agent]:
+        """
+        Create the default brand agent when a brand is verified. Idempotent.
+        :param brand: Brand ORM (must be verified)
+        :return: Agent or None if already exists
+        """
+        agent_id = f"agent:brand:{brand.slug}:1.0.0"
+        existing = await self.registry_repository.get_agent_by_agent_id(agent_id)
+        if existing:
+            return existing
+
+        placeholder_url = settings.BRAND_AGENT_PLACEHOLDER_URL
+        ask_input = {
+            "type": "object",
+            "properties": {"message": {"type": "string", "description": "User question about the brand"}},
+            "required": ["message"],
+        }
+        ask_output = {
+            "type": "object",
+            "properties": {"message": {"type": "string", "description": "Response from the brand"}},
+        }
+        manifest_json = {
+            "agent_id": agent_id,
+            "name": f"{brand.name} – Official",
+            "description": brand.description or f"Official assistant for {brand.name}. Ask about the company, products, or contact.",
+            "version": "1.0.0",
+            "endpoints": {"invoke": placeholder_url},
+            "capabilities": [
+                {
+                    "id": "ask",
+                    "input_schema": ask_input,
+                    "output_schema": ask_output,
+                    "auth_type": {"type": "public"},
+                }
+            ],
+            "tags": ["brand", brand.slug, "company", "contact"],
+            "trust": {"verification": "verified"},
+        }
+        tags = ["brand", brand.slug, "company", "contact"]
+
+        agent_text = self.embedding_service.prepare_agent_text_for_embedding(
+            manifest_json["name"], manifest_json["description"], tags
+        )
+        agent_embedding = await self.embedding_service.generate_embedding(agent_text, enhance=False)
+
+        agent = Agent(
+            agent_id=agent_id,
+            user_id=brand.owner_id,
+            brand_id=brand.id,
+            name=manifest_json["name"],
+            description=manifest_json["description"],
+            version="1.0.0",
+            invoke_endpoint=placeholder_url,
+            manifest_json=manifest_json,
+            tags=tags,
+            trust_verification="verified",
+            is_brand_agent=True,
+        )
+        created_agent = await self.registry_repository.create_agent(agent)
+
+        await self.qdrant_service.upsert_vector(
+            point_id=created_agent.id,
+            vector=agent_embedding,
+            payload={
+                "agent_id": agent_id,
+                "is_active": True,
+                "name": manifest_json["name"],
+                "embedding_version": settings.EMBEDDING_VERSION,
+            },
+        )
+        created_agent.qdrant_point_id = created_agent.id
+        created_agent.embedding_version = settings.EMBEDDING_VERSION
+        await self.registry_repository.update_agent(created_agent)
+
+        cap = Capability(
+            agent_id=created_agent.id,
+            capability_id="ask",
+            input_schema=ask_input,
+            output_schema=ask_output,
+            auth_type=auth_type_to_stored({"type": "public"}),
+        )
+        await self.registry_repository.add_capabilities([cap])
+        cap_obj = (await self.registry_repository.get_agent_capabilities(created_agent.id))[0]
+        cap_text = self.embedding_service.prepare_capability_text_for_embedding(
+            "ask", ask_input, ask_output
+        )
+        cap_embedding = await self.embedding_service.generate_embedding(cap_text, enhance=False)
+        await self.qdrant_service.upsert_capability_vector(
+            point_id=cap_obj.id,
+            vector=cap_embedding,
+            payload={
+                "agent_id": agent_id,
+                "agent_uuid": str(created_agent.id),
+                "capability_id": "ask",
+                "agent_name": manifest_json["name"],
+                "is_active": True,
+                "embedding_version": settings.EMBEDDING_VERSION,
+            },
+        )
+        cap_obj.qdrant_point_id = cap_obj.id
+        await self.registry_repository.update_capability(cap_obj)
+
+        return await self.registry_repository.get_agent_by_id(created_agent.id)
+
     async def get_trending_agents(
         self, window_days: int = 7, limit: int = 20
     ) -> List[Tuple[Agent, int]]:

@@ -13,6 +13,7 @@ import json
 
 from src.core.url_validation import validate_invoke_endpoint
 from src.models.conversation import Conversation
+from src.repositories.brand import BrandRepository
 from src.models.invocation_log import InvocationLog
 from src.models.message import Message
 from src.repositories.broker import BrokerConfigRepository
@@ -23,6 +24,7 @@ from src.repositories.registry import RegistryRepository
 from src.schemas.broker import InvokeRequest, InvokeResponse
 from src.schemas.registry import parse_auth_type_stored
 from src.core.settings import settings
+from src.utilities.brand_agent_llm import generate_brand_agent_response
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
 
@@ -48,12 +50,14 @@ class BrokerService:
         registry_repository: RegistryRepository = Depends(),
         conversation_repository: ConversationRepository = Depends(),
         message_repository: MessageRepository = Depends(),
+        brand_repository: BrandRepository = Depends(),
     ):
         self.invocation_log_repository = invocation_log_repository
         self.broker_config_repository = broker_config_repository
         self.registry_repository = registry_repository
         self.conversation_repository = conversation_repository
         self.message_repository = message_repository
+        self.brand_repository = brand_repository
 
     async def invoke_agent(
         self,
@@ -192,6 +196,60 @@ class BrokerService:
             )
 
         request_payload = invoke_request.input or {}
+
+        # Brand agent: invoke via LLM inside Intuno (no external HTTP)
+        if getattr(agent, "is_brand_agent", False) and agent.brand_id:
+            brand = await self.brand_repository.get_by_id(agent.brand_id)
+            if brand:
+                if msg_id is None and conv_id is not None:
+                    user_message = await self.message_repository.create(
+                        Message(
+                            conversation_id=conv_id,
+                            role="user",
+                            content=_extract_text(request_payload),
+                            metadata_=request_payload,
+                        )
+                    )
+                    msg_id = user_message.id
+                try:
+                    response_data = await generate_brand_agent_response(brand, request_payload)
+                except Exception as e:
+                    response_data = {"error": str(e)}
+                    success = False
+                else:
+                    success = True
+                latency_ms = int((time.time() - start_time) * 1000)
+                if success and conv_id is not None and response_data:
+                    await self.message_repository.create(
+                        Message(
+                            conversation_id=conv_id,
+                            role="assistant",
+                            content=_extract_text(response_data),
+                            metadata_=response_data,
+                        )
+                    )
+                invocation_log = InvocationLog(
+                    caller_user_id=caller_user_id,
+                    target_agent_id=agent.id,
+                    capability_id=invoke_request.capability_id,
+                    request_payload=request_payload,
+                    response_payload=response_data,
+                    status_code=200 if success else 500,
+                    latency_ms=latency_ms,
+                    error_message=None if success else response_data.get("error"),
+                    integration_id=integration_id,
+                    conversation_id=conv_id,
+                    message_id=msg_id,
+                )
+                await self.invocation_log_repository.create_invocation_log(invocation_log)
+                return InvokeResponse(
+                    success=success,
+                    data=response_data if success else None,
+                    error=None if success else response_data.get("error", "Brand agent error"),
+                    latency_ms=latency_ms,
+                    status_code=200 if success else 500,
+                    conversation_id=conv_id,
+                )
 
         # Persist the user message
         if msg_id is None and conv_id is not None:

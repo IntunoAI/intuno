@@ -73,15 +73,15 @@ class DashboardService:
         active = sum(1 for a in my_agents if a.is_active)
         inactive = total_agents - active
         agent_status_data = [
-            {"name": "Active", "value": active, "color": "#37322F"},
-            {"name": "Idle", "value": max(0, inactive - 1), "color": "#D4D2CF"},
-            {"name": "Offline", "value": min(1, inactive), "color": "#E9E7E4"},
+            {"name": "Active", "value": active, "color": "#22c55e"},
+            {"name": "Idle", "value": max(0, inactive - 1), "color": "#eab308"},
+            {"name": "Offline", "value": min(1, inactive), "color": "#6b7280"},
         ]
         if total_agents == 0:
             agent_status_data = [
-                {"name": "Active", "value": 0, "color": "#37322F"},
-                {"name": "Idle", "value": 0, "color": "#D4D2CF"},
-                {"name": "Offline", "value": 0, "color": "#E9E7E4"},
+                {"name": "Active", "value": 0, "color": "#22c55e"},
+                {"name": "Idle", "value": 0, "color": "#eab308"},
+                {"name": "Offline", "value": 0, "color": "#6b7280"},
             ]
 
         # Connection health: simplified - integrations count; no fake degraded/critical

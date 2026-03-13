@@ -61,6 +61,7 @@ class Agent(BaseModel):
     category: Column[Optional[str]] = Column(String, nullable=True)
     trust_verification: Column[str] = Column(String, nullable=False)
     is_active: Column[bool] = Column(Boolean, default=True, nullable=False)
+    is_brand_agent: Column[bool] = Column(Boolean, default=False, nullable=False, server_default="false")
     qdrant_point_id: Column[UUID] = Column(PostgresUUID, nullable=True, index=True)
     embedding_version: Column[str] = Column(String, nullable=False, default="1.0", server_default="1.0")
 

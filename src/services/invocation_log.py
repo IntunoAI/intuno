@@ -1,6 +1,7 @@
 """Invocation log service: delegates to InvocationLogRepository."""
 
-from typing import List
+from datetime import datetime
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import Depends
@@ -20,10 +21,20 @@ class InvocationLogService:
         user_id: UUID,
         limit: int = 50,
         offset: int = 0,
+        agent_id: Optional[UUID] = None,
+        from_date: Optional[datetime] = None,
+        to_date: Optional[datetime] = None,
+        status: Optional[str] = None,
     ) -> List[InvocationLog]:
-        """Get invocation logs for a user."""
-        return await self.invocation_log_repository.get_invocation_logs_by_user_id(
-            user_id, limit, offset
+        """Get invocation logs for a user (caller OR owner of target agent)."""
+        return await self.invocation_log_repository.get_invocation_logs_for_dashboard(
+            user_id,
+            limit=limit,
+            offset=offset,
+            agent_id=agent_id,
+            from_date=from_date,
+            to_date=to_date,
+            status=status,
         )
 
     async def get_agent_invocation_logs(

@@ -4,12 +4,12 @@ from datetime import datetime
 from typing import Any, Dict, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
 
 class InvocationLogResponse(BaseModel):
     """Invocation log response schema; parse from ORM with model_validate(log).
-    Includes frontend-friendly aliases: agent_id, timestamp, status, input, output."""
+    Includes frontend-friendly aliases: agent_id, timestamp, status, input, output, agent_name."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -27,6 +27,18 @@ class InvocationLogResponse(BaseModel):
     parent_invocation_id: Optional[UUID] = None
     request_payload: Optional[Dict[str, Any]] = None
     response_payload: Optional[Dict[str, Any]] = None
+    agent_name: Optional[str] = None
+    agent_identifier: Optional[str] = None
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def inject_agent_name(cls, data, handler):
+        """Inject agent_name from ORM target_agent when validating from InvocationLog."""
+        instance = handler(data)
+        if hasattr(data, "target_agent") and data.target_agent is not None:
+            object.__setattr__(instance, "agent_name", data.target_agent.name or "Unknown")
+            object.__setattr__(instance, "agent_identifier", data.target_agent.agent_id)
+        return instance
 
     @computed_field
     @property
