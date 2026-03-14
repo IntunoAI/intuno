@@ -413,8 +413,6 @@ class RegistryService:
     async def create_brand_agent(self, brand: "Brand") -> Optional[Agent]:
         """Create the default brand agent when a brand is verified. Idempotent."""
         agent_id = f"brand-{brand.slug}-{str(uuid4()).replace('-', '')[:8]}"
-        existing = await self.registry_repository.get_agent_by_agent_id(f"brand-{brand.slug}-")
-        # Check by name pattern instead
         agents = await self.registry_repository.get_agents_by_user_id(brand.owner_id)
         for a in agents:
             if a.is_brand_agent and a.brand_id == brand.id:

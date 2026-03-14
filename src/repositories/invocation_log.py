@@ -183,6 +183,7 @@ class InvocationLogRepository:
         """
         result = await self.session.execute(
             select(InvocationLog)
+            .options(selectinload(InvocationLog.target_agent))
             .where(
                 InvocationLog.conversation_id == conversation_id,
                 InvocationLog.caller_user_id == user_id,

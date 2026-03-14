@@ -1,5 +1,6 @@
 """Registry routes for agent management."""
 
+import asyncio
 from typing import List, Optional
 from uuid import UUID
 
@@ -145,8 +146,10 @@ async def list_agents(
 
     agents = await registry_service.list_agents(query)
     agent_ids = [a.id for a in agents]
-    rating_aggregates = await registry_service.get_rating_aggregates_bulk(agent_ids)
-    quality_metrics = await registry_service.get_agent_quality_metrics_bulk(agent_ids)
+    rating_aggregates, quality_metrics = await asyncio.gather(
+        registry_service.get_rating_aggregates_bulk(agent_ids),
+        registry_service.get_agent_quality_metrics_bulk(agent_ids),
+    )
 
     return [
         _build_list_response(
@@ -173,8 +176,10 @@ async def list_new_agents(
     query = AgentSearchQuery(sort="created_at", order="desc", days=days, limit=limit, offset=offset)
     agents = await registry_service.list_agents(query)
     agent_ids = [a.id for a in agents]
-    rating_aggregates = await registry_service.get_rating_aggregates_bulk(agent_ids)
-    quality_metrics = await registry_service.get_agent_quality_metrics_bulk(agent_ids)
+    rating_aggregates, quality_metrics = await asyncio.gather(
+        registry_service.get_rating_aggregates_bulk(agent_ids),
+        registry_service.get_agent_quality_metrics_bulk(agent_ids),
+    )
 
     return [
         _build_list_response(
@@ -202,8 +207,10 @@ async def list_trending_agents(
         return []
     agents = [agent for agent, _ in results]
     agent_ids = [a.id for a in agents]
-    rating_aggregates = await registry_service.get_rating_aggregates_bulk(agent_ids)
-    quality_metrics = await registry_service.get_agent_quality_metrics_bulk(agent_ids, window_days=window_days)
+    rating_aggregates, quality_metrics = await asyncio.gather(
+        registry_service.get_rating_aggregates_bulk(agent_ids),
+        registry_service.get_agent_quality_metrics_bulk(agent_ids, window_days=window_days),
+    )
     count_by_id = {agent.id: count for agent, count in results}
 
     return [
@@ -406,8 +413,10 @@ async def semantic_discover(
     )
     results = await registry_service.semantic_discover(discover_query, enhance_query=enhance_query)
     agent_ids = [agent.id for agent, _ in results]
-    rating_aggregates = await registry_service.get_rating_aggregates_bulk(agent_ids)
-    quality_metrics = await registry_service.get_agent_quality_metrics_bulk(agent_ids)
+    rating_aggregates, quality_metrics = await asyncio.gather(
+        registry_service.get_rating_aggregates_bulk(agent_ids),
+        registry_service.get_agent_quality_metrics_bulk(agent_ids),
+    )
 
     return [
         _build_list_response(
@@ -431,8 +440,10 @@ async def get_agents_by_user_id(
     """Get current user's agents."""
     agents = await registry_service.get_agents_by_user_id(current_user.id)
     agent_ids = [a.id for a in agents]
-    rating_aggregates = await registry_service.get_rating_aggregates_bulk(agent_ids)
-    quality_metrics = await registry_service.get_agent_quality_metrics_bulk(agent_ids)
+    rating_aggregates, quality_metrics = await asyncio.gather(
+        registry_service.get_rating_aggregates_bulk(agent_ids),
+        registry_service.get_agent_quality_metrics_bulk(agent_ids),
+    )
 
     return [
         _build_list_response(

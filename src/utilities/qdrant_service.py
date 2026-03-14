@@ -22,6 +22,7 @@ class QdrantService:
 
     AGENTS_COLLECTION = "agents"
     VECTOR_SIZE = 1536  # OpenAI text-embedding-3-small dimension
+    _agents_collection_initialized: bool = False  # shared across all instances
 
     def __init__(self):
         """Initialize Qdrant client."""
@@ -29,7 +30,6 @@ class QdrantService:
             url=settings.QDRANT_URL,
             api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None,
         )
-        self._agents_collection_initialized = False
 
     async def ensure_collection(self) -> None:
         """Ensure the agents collection exists and is properly configured."""
@@ -48,7 +48,7 @@ class QdrantService:
                 ),
             )
 
-        self._agents_collection_initialized = True
+        QdrantService._agents_collection_initialized = True
 
     async def upsert_vector(
         self,
