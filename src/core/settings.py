@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -5,6 +7,7 @@ class Settings(BaseSettings):
     # Secrets
     DATABASE_URL: str = ""
     OPENAI_API_KEY: str = ""
+    SAPTIVA_API_KEY: str = ""
     JWT_SECRET_KEY: str = "dev-secret-change-in-prod"
 
     # Configuration
@@ -19,6 +22,49 @@ class Settings(BaseSettings):
 
     # API Key Configuration
     API_KEY_LENGTH: int = 32
+
+    # Redis Configuration (for caching; empty = no cache)
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Dashboard cache TTL in seconds (0 = no cache)
+    DASHBOARD_CACHE_TTL: int = 120
+
+    # Qdrant Configuration
+    QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_API_KEY: str = ""
+
+    # LLM Enhancement Configuration
+    ENABLE_LLM_ENHANCEMENT: bool = False  # Default to False for cost/latency reasons
+    LLM_ENHANCEMENT_MODEL: str = "gpt-4o-mini"
+
+    # Planner: when True, use LLM to decompose goal into multiple steps; when False, single-step
+    PLANNER_USE_LLM: bool = False
+    PLANNER_LLM_MODEL: str = "gpt-4o-mini"
+
+    # Brand agent: LLM for conversational responses (uses OPENAI_API_KEY)
+    BRAND_AGENT_LLM_MODEL: str = "gpt-4o-mini"
+    # Placeholder invoke URL for brand agents (never called; add to INVOKE_ENDPOINT_ALLOWED_HOSTS if needed)
+    BRAND_AGENT_PLACEHOLDER_URL: str = "https://brand-agent.internal/invoke"
+    
+    # Embedding Configuration
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_VERSION: str = "1.0"  # Version of embedding structure/format
+
+    # Brand verification (email code expiry; provider config added later)
+    BRAND_VERIFICATION_CODE_EXPIRY_MINUTES: int = 15
+
+    # Task (orchestrator) timeout – global task-level timeout in seconds
+    TASK_TIMEOUT_SECONDS: int = 60
+
+    # SSRF protection: comma-separated host patterns for invoke_endpoint (e.g. "*.example.com").
+    # Empty = allow public IPs only (reject private/loopback).
+    INVOKE_ENDPOINT_ALLOWED_HOSTS: str = ""
+
+    # Encryption key for per-agent credentials (defaults to JWT_SECRET_KEY-derived if empty)
+    CREDENTIALS_ENCRYPTION_KEY: str = ""
+
+    # Orchestrator fallback: when discovery returns no candidates, use this agent
+    ORCHESTRATOR_FALLBACK_AGENT_ID: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

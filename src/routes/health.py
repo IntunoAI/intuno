@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-router = APIRouter(prefix="/health")
+router = APIRouter(prefix="/health", tags=["Health"])
 
 
 @router.get("")
