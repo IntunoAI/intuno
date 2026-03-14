@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str = ""
 
     # LLM Enhancement Configuration
-    ENABLE_LLM_ENHANCEMENT: bool = False  # Default to False for cost/latency reasons
+    ENABLE_LLM_ENHANCEMENT: bool = True  # Default to True for cost/latency reasons
     LLM_ENHANCEMENT_MODEL: str = "gpt-4o-mini"
 
     # Planner: when True, use LLM to decompose goal into multiple steps; when False, single-step

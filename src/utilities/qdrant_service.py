@@ -1,6 +1,7 @@
 """Qdrant service for vector storage and similarity search."""
 
-from typing import List, Optional, Dict, Any
+import logging
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from qdrant_client import AsyncQdrantClient
@@ -11,6 +12,7 @@ from qdrant_client.models import (
     Filter,
     FieldCondition,
     MatchValue,
+    PayloadSchemaType,
     SearchParams,
 )
 
@@ -47,6 +49,21 @@ class QdrantService:
                     distance=Distance.COSINE,
                 ),
             )
+
+        # Create payload index for is_active filter (required by Qdrant for boolean filters)
+        # Idempotent: safe for both new and existing collections
+        try:
+            await self.client.create_payload_index(
+                collection_name=self.AGENTS_COLLECTION,
+                field_name="is_active",
+                field_schema=PayloadSchemaType.BOOL,
+            )
+        except Exception as e:
+            err_msg = str(e).lower()
+            if "already exists" not in err_msg and "duplicate" not in err_msg:
+                logging.getLogger(__name__).warning(
+                    "Could not create is_active payload index (may already exist): %s", e
+                )
 
         QdrantService._agents_collection_initialized = True
 
