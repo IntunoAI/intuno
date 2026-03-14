@@ -1,8 +1,6 @@
-# Production stack: Redis + FastAPI API (Coolify-ready)
-# Postgres and Qdrant are external. Set vars in Coolify UI or .env for local.
-#
-# Coolify: variables with ${VAR} are auto-detected and editable in the UI
-# Local:  use .env or export vars before docker compose up
+# Optional: multi-container setup (Redis + API as separate services)
+# Prod: use Dockerfile alone (Redis embedded). Coolify: Dockerfile build pack, no compose.
+# Local dev: docker-compose.dev.yml for Postgres + Qdrant + Redis
 
 services:
   redis:
@@ -29,7 +27,7 @@ services:
       - path: .env
         required: false
     environment:
-      REDIS_URL: redis://wisdom-redis:6379/0
+      REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: production
       # Coolify: matches vars in your UI (required: DATABASE_URL, QDRANT_URL, JWT_SECRET_KEY)
       DATABASE_URL: ${DATABASE_URL:?}
