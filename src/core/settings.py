@@ -63,9 +63,8 @@ class Settings(BaseSettings):
     # Encryption key for per-agent credentials (defaults to JWT_SECRET_KEY-derived if empty)
     CREDENTIALS_ENCRYPTION_KEY: str = ""
 
-    # Orchestrator fallback: when discovery returns no candidates, use this agent (and optionally capability)
+    # Orchestrator fallback: when discovery returns no candidates, use this agent
     ORCHESTRATOR_FALLBACK_AGENT_ID: Optional[str] = None
-    ORCHESTRATOR_FALLBACK_CAPABILITY_ID: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

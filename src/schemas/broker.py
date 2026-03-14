@@ -10,7 +10,6 @@ class InvokeRequest(BaseModel):
     """Agent invocation request schema."""
 
     agent_id: str
-    capability_id: str
     input: Dict[str, Any]
     conversation_id: Optional[UUID] = None
     message_id: Optional[UUID] = None

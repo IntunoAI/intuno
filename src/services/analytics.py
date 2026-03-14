@@ -49,7 +49,6 @@ class AnalyticsService:
             avg_latency,
             by_date,
             by_agent,
-            by_capability,
         ) = await self.invocation_log_repository.get_analytics_summary(user_id, days)
 
         # Recent failures (last 5)
@@ -78,10 +77,6 @@ class AnalyticsService:
             "agent_performance": [
                 {"agent": a, "success": s, "failures": f}
                 for a, s, f in by_agent
-            ],
-            "top_capabilities": [
-                {"name": cap, "count": cnt}
-                for cap, cnt in by_capability
             ],
             "recent_failures": recent_failures,
         }

@@ -3,7 +3,7 @@
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-from sqlalchemy import Column, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Column, ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 from sqlalchemy.orm import relationship
 
@@ -21,7 +21,6 @@ class InvocationLog(BaseModel):
     target_agent_id: Column[UUID] = Column(
         PostgresUUID, ForeignKey("agents.id"), nullable=False
     )
-    capability_id: Column[str] = Column(String, nullable=False)
     request_payload: Column[Dict[str, Any]] = Column(JSONB, nullable=False)
     response_payload: Column[Dict[str, Any]] = Column(JSONB, nullable=True)
     status_code: Column[int] = Column(Integer, nullable=False)

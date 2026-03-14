@@ -112,7 +112,6 @@ class DashboardService:
                 "title": f"{agent_name} invoked",
                 "agent_name": agent_name,
                 "agent_id": agent_id_str,
-                "capability_id": log.capability_id,
                 "status": status,
                 "time_ago": time_ago,
             })

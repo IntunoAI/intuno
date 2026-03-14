@@ -29,7 +29,7 @@ async def invoke_agent(
     broker_service: BrokerService = Depends(),
 ):
     """
-    Invoke an agent capability through the broker.
+    Invoke an agent through the broker.
     Optional conversation_id and message_id attach the invocation to a conversation/message.
     :param invoke_request: InvokeRequest
     :param user_and_integration: tuple[User, Optional[UUID]]

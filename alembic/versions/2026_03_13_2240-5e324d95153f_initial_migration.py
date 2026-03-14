@@ -1,8 +1,8 @@
 """initial migration
 
-Revision ID: 3e75d3535bb3
+Revision ID: 5e324d95153f
 Revises: 
-Create Date: 2026-02-14 01:11:50.525315
+Create Date: 2026-03-13 22:40:52.026071
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '3e75d3535bb3'
+revision: str = '5e324d95153f'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -73,13 +73,15 @@ def upgrade() -> None:
     sa.Column('brand_id', sa.UUID(), nullable=True),
     sa.Column('name', sa.String(), nullable=False),
     sa.Column('description', sa.Text(), nullable=False),
-    sa.Column('version', sa.String(), nullable=False),
+    sa.Column('version', sa.String(), server_default='1.0.0', nullable=False),
     sa.Column('invoke_endpoint', sa.String(), nullable=False),
-    sa.Column('manifest_json', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('auth_type', sa.String(), server_default='public', nullable=False),
+    sa.Column('input_schema', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('tags', sa.ARRAY(sa.String()), nullable=False),
     sa.Column('category', sa.String(), nullable=True),
-    sa.Column('trust_verification', sa.String(), nullable=False),
+    sa.Column('trust_verification', sa.String(), server_default='self-signed', nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('is_brand_agent', sa.Boolean(), server_default='false', nullable=False),
     sa.Column('qdrant_point_id', sa.UUID(), nullable=True),
     sa.Column('embedding_version', sa.String(), server_default='1.0', nullable=False),
     sa.Column('id', sa.UUID(), nullable=False),
@@ -135,10 +137,22 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('agent_credentials',
+    sa.Column('agent_id', sa.UUID(), nullable=False),
+    sa.Column('credential_type', sa.String(), nullable=False),
+    sa.Column('encrypted_value', sa.Text(), nullable=False),
+    sa.Column('auth_header', sa.String(), nullable=True),
+    sa.Column('auth_scheme', sa.String(), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+    sa.ForeignKeyConstraint(['agent_id'], ['agents.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('idx_agent_credentials_agent_id', 'agent_credentials', ['agent_id'], unique=False)
     op.create_table('agent_ratings',
     sa.Column('user_id', sa.UUID(), nullable=False),
     sa.Column('agent_id', sa.UUID(), nullable=False),
-    sa.Column('capability_id', sa.String(), nullable=True),
     sa.Column('score', sa.Integer(), nullable=False),
     sa.Column('comment', sa.Text(), nullable=True),
     sa.Column('id', sa.UUID(), nullable=False),
@@ -151,31 +165,6 @@ def upgrade() -> None:
     op.create_index('idx_agent_ratings_agent_id', 'agent_ratings', ['agent_id'], unique=False)
     op.create_index('idx_agent_ratings_agent_updated', 'agent_ratings', ['agent_id', 'updated_at'], unique=False)
     op.create_index('idx_agent_ratings_user_id', 'agent_ratings', ['user_id'], unique=False)
-    op.create_table('agent_requirements',
-    sa.Column('agent_id', sa.UUID(), nullable=False),
-    sa.Column('required_capability', sa.String(), nullable=False),
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['agent_id'], ['agents.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_table('capabilities',
-    sa.Column('agent_id', sa.UUID(), nullable=False),
-    sa.Column('capability_id', sa.String(), nullable=False),
-    sa.Column('input_schema', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('output_schema', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-    sa.Column('auth_type', sa.String(), nullable=False),
-    sa.Column('qdrant_point_id', sa.UUID(), nullable=True),
-    sa.Column('embedding_version', sa.String(), server_default='1.0', nullable=False),
-    sa.Column('id', sa.UUID(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-    sa.ForeignKeyConstraint(['agent_id'], ['agents.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('idx_capabilities_agent_capability', 'capabilities', ['agent_id', 'capability_id'], unique=False)
-    op.create_index(op.f('ix_capabilities_qdrant_point_id'), 'capabilities', ['qdrant_point_id'], unique=False)
     op.create_table('messages',
     sa.Column('conversation_id', sa.UUID(), nullable=False),
     sa.Column('role', sa.String(length=32), nullable=False),
@@ -190,7 +179,6 @@ def upgrade() -> None:
     op.create_table('invocation_logs',
     sa.Column('caller_user_id', sa.UUID(), nullable=False),
     sa.Column('target_agent_id', sa.UUID(), nullable=False),
-    sa.Column('capability_id', sa.String(), nullable=False),
     sa.Column('request_payload', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
     sa.Column('response_payload', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('status_code', sa.Integer(), nullable=False),
@@ -251,14 +239,12 @@ def downgrade() -> None:
     op.drop_index('idx_invocation_logs_caller_user_id', table_name='invocation_logs')
     op.drop_table('invocation_logs')
     op.drop_table('messages')
-    op.drop_index(op.f('ix_capabilities_qdrant_point_id'), table_name='capabilities')
-    op.drop_index('idx_capabilities_agent_capability', table_name='capabilities')
-    op.drop_table('capabilities')
-    op.drop_table('agent_requirements')
     op.drop_index('idx_agent_ratings_user_id', table_name='agent_ratings')
     op.drop_index('idx_agent_ratings_agent_updated', table_name='agent_ratings')
     op.drop_index('idx_agent_ratings_agent_id', table_name='agent_ratings')
     op.drop_table('agent_ratings')
+    op.drop_index('idx_agent_credentials_agent_id', table_name='agent_credentials')
+    op.drop_table('agent_credentials')
     op.drop_table('conversations')
     op.drop_table('broker_configs')
     op.drop_table('api_keys')

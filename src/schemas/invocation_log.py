@@ -16,7 +16,6 @@ class InvocationLogResponse(BaseModel):
     id: UUID
     caller_user_id: UUID
     target_agent_id: UUID
-    capability_id: str
     status_code: int
     latency_ms: int
     error_message: Optional[str] = None

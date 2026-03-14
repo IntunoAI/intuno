@@ -369,12 +369,11 @@ class InvocationLogRepository:
         float,
         List[Tuple[str, int, int]],
         List[Tuple[str, float, float]],
-        List[Tuple[str, int]],
     ]:
         """
         Get aggregated analytics for a user over the last N days.
         Includes invocations made BY the user OR targeting the user's agents.
-        Returns (total, success_rate, failed, avg_latency, by_date, by_agent, by_capability).
+        Returns (total, success_rate, failed, avg_latency, by_date, by_agent).
         """
         since = datetime.now(timezone.utc) - timedelta(days=days)
         base_filter = and_(
@@ -445,20 +444,4 @@ class InvocationLogRepository:
             agent_name = r.name or "Unknown"
             by_agent.append((agent_name, round(success_pct, 1), round(fail_pct, 1)))
 
-        # By capability
-        cap_stmt = (
-            select(
-                InvocationLog.capability_id,
-                func.count(InvocationLog.id).label("count"),
-            )
-            .select_from(InvocationLog)
-            .join(Agent, InvocationLog.target_agent_id == Agent.id)
-            .where(base_filter)
-            .group_by(InvocationLog.capability_id)
-            .order_by(func.count(InvocationLog.id).desc())
-            .limit(10)
-        )
-        cap_rows = (await self.session.execute(cap_stmt)).all()
-        by_capability = [(r.capability_id, r.count or 0) for r in cap_rows]
-
-        return (total, success_rate, failed, avg_latency, by_date, by_agent, by_capability)
+        return (total, success_rate, failed, avg_latency, by_date, by_agent)

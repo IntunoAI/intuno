@@ -20,10 +20,6 @@ class AnalyticsSummaryResponse(BaseModel):
         default_factory=list,
         description="List of {agent, success, failures} per agent",
     )
-    top_capabilities: List[dict] = Field(
-        default_factory=list,
-        description="List of {name, count} sorted by count desc",
-    )
     recent_failures: List[dict] = Field(
         default_factory=list,
         description="List of {agent, error, time} for recent failed invocations",

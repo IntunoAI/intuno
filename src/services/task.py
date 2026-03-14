@@ -130,7 +130,6 @@ class TaskService:
             external_user_id=data.external_user_id,
             task_timeout_seconds=settings.TASK_TIMEOUT_SECONDS,
             fallback_agent_id=settings.ORCHESTRATOR_FALLBACK_AGENT_ID,
-            fallback_capability_id=settings.ORCHESTRATOR_FALLBACK_CAPABILITY_ID,
             on_step_progress=on_progress,
         )
         result = await self.orchestrator.run(goal=data.goal, input_data=data.input, context=ctx)
@@ -214,7 +213,6 @@ async def run_task_background(task_id: UUID) -> None:
             external_user_id=task.external_user_id,
             task_timeout_seconds=settings.TASK_TIMEOUT_SECONDS,
             fallback_agent_id=settings.ORCHESTRATOR_FALLBACK_AGENT_ID,
-            fallback_capability_id=settings.ORCHESTRATOR_FALLBACK_CAPABILITY_ID,
             on_step_progress=on_progress,
         )
         result = await orchestrator.run(goal=task.goal, input_data=task.input or {}, context=ctx)

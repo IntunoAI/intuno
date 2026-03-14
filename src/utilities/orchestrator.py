@@ -22,7 +22,6 @@ class OrchestratorContext:
     task_timeout_seconds: int
     external_user_id: Optional[str] = None
     fallback_agent_id: Optional[str] = None
-    fallback_capability_id: Optional[str] = None
     on_step_progress: Optional[Callable] = None
 
 
@@ -105,7 +104,6 @@ class Orchestrator:
             message_id=context.message_id,
             external_user_id=context.external_user_id,
             fallback_agent_id=context.fallback_agent_id,
-            fallback_capability_id=context.fallback_capability_id,
         )
 
         for step_spec in steps_specs:

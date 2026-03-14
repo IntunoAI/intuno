@@ -41,18 +41,14 @@ from src.schemas.task import (
     TaskResponse,
 )
 from src.schemas.registry import (
-    AgentCreate,
     AgentListResponse,
-    AgentManifest,
+    AgentRegistration,
     AgentResponse,
     AgentSearchQuery,
     AgentUpdate,
-    CapabilitySchema,
-    CapabilitySlimSchema,
     DiscoverQuery,
     RateRequest,
     RatingResponse,
-    requirements_from_orm,
 )
 
 __all__ = [
@@ -94,16 +90,12 @@ __all__ = [
     "TaskListResponse",
     "TaskResponse",
     # Registry
-    "AgentCreate",
+    "AgentRegistration",
     "AgentListResponse",
-    "AgentManifest",
     "AgentResponse",
     "AgentSearchQuery",
     "AgentUpdate",
-    "CapabilitySchema",
-    "CapabilitySlimSchema",
     "DiscoverQuery",
     "RateRequest",
     "RatingResponse",
-    "requirements_from_orm",
 ]

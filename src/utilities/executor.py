@@ -19,25 +19,23 @@ class ExecutorContext:
     conversation_id: Optional[UUID]
     message_id: Optional[UUID]
     fallback_agent_id: Optional[str]
-    fallback_capability_id: Optional[str]
     external_user_id: Optional[str] = None
 
 
 @dataclass
 class StepResult:
-    """Result of executing one step: success, data/error, which agent/capability was used, and conversation."""
+    """Result of executing one step."""
 
     success: bool
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     agent_id: Optional[str] = None
-    capability_id: Optional[str] = None
     conversation_id: Optional[UUID] = None
 
 
 class Executor:
     """
-    Executes a single step: discover (Registry) -> select agent/capability -> invoke (Broker).
+    Executes a single step: discover (Registry) -> select agent -> invoke (Broker).
     Handles fallback when discovery returns no candidates; respects allowlist.
     """
 
@@ -59,19 +57,19 @@ class Executor:
         context: ExecutorContext,
     ) -> StepResult:
         """
-        Run one step: discover agents/capabilities, select (or use fallback), invoke via Broker.
+        Run one step: discover agents, select (or use fallback), invoke via Broker.
         :param step: StepSpec
         :param context: ExecutorContext
         :return: StepResult
         """
-        # 1. Generate embedding and discover (agent, capability_id, distance)
+        # 1. Discover agents via semantic search
         discover_query = DiscoverQuery(
             query=step.description,
             limit=5,
             similarity_threshold=None,
         )
-        candidates: List[tuple[Agent, str, float]] = (
-            await self.registry_service.semantic_discover_with_capability(
+        candidates: List[tuple[Agent, float]] = (
+            await self.registry_service.semantic_discover(
                 discover_query,
                 enhance_query=True,
             )
@@ -85,11 +83,11 @@ class Executor:
         if config and config.allowed_agent_ids and len(config.allowed_agent_ids) > 0:
             allowed_agent_ids = config.allowed_agent_ids
 
-        # 3. Filter candidates by allowlist if present
+        # 3. Filter candidates by allowlist
         if allowed_agent_ids is not None:
             candidates = [
-                (agent, cap_id, dist)
-                for agent, cap_id, dist in candidates
+                (agent, dist)
+                for agent, dist in candidates
                 if agent.id in allowed_agent_ids
             ]
 
@@ -109,17 +107,8 @@ class Executor:
                         success=False,
                         error="No agents found and fallback not allowed for this integration.",
                     )
-                cap_id = context.fallback_capability_id
-                if not cap_id and fallback_agent.capabilities:
-                    cap_id = fallback_agent.capabilities[0].capability_id
-                if not cap_id:
-                    return StepResult(
-                        success=False,
-                        error="No agents found and fallback agent has no capabilities.",
-                    )
                 return await self._invoke_one(
                     context.fallback_agent_id,
-                    cap_id,
                     step.input,
                     context,
                 )
@@ -129,33 +118,27 @@ class Executor:
             )
 
         # 5. Try each candidate in order until one succeeds
-        for agent, capability_id, _ in candidates:
+        for agent, _ in candidates:
             result = await self._invoke_one(
                 agent.agent_id,
-                capability_id,
                 step.input,
                 context,
             )
             if result.success:
                 return result
 
-        # 6. All candidates failed; try fallback if configured
+        # 6. All candidates failed; try fallback
         if context.fallback_agent_id:
             fallback_agent = await self.registry_service.get_agent(
                 context.fallback_agent_id
             )
             if fallback_agent and fallback_agent.is_active:
                 if allowed_agent_ids is None or fallback_agent.id in allowed_agent_ids:
-                    cap_id = context.fallback_capability_id
-                    if not cap_id and fallback_agent.capabilities:
-                        cap_id = fallback_agent.capabilities[0].capability_id
-                    if cap_id:
-                        return await self._invoke_one(
-                            context.fallback_agent_id,
-                            cap_id,
-                            step.input,
-                            context,
-                        )
+                    return await self._invoke_one(
+                        context.fallback_agent_id,
+                        step.input,
+                        context,
+                    )
             return StepResult(
                 success=False,
                 error="All candidates failed and fallback not available or not allowed.",
@@ -169,14 +152,12 @@ class Executor:
     async def _invoke_one(
         self,
         agent_id: str,
-        capability_id: str,
         step_input: Dict[str, Any],
         context: ExecutorContext,
     ) -> StepResult:
-        """Invoke one agent/capability via Broker and return StepResult."""
+        """Invoke one agent via Broker and return StepResult."""
         invoke_request = InvokeRequest(
             agent_id=agent_id,
-            capability_id=capability_id,
             input=step_input,
             conversation_id=context.conversation_id,
             message_id=context.message_id,
@@ -194,13 +175,11 @@ class Executor:
                 success=True,
                 data=response.data,
                 agent_id=agent_id,
-                capability_id=capability_id,
                 conversation_id=response.conversation_id,
             )
         return StepResult(
             success=False,
             error=response.error or "Agent invocation failed",
             agent_id=agent_id,
-            capability_id=capability_id,
             conversation_id=response.conversation_id,
         )

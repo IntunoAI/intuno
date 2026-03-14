@@ -1,4 +1,4 @@
-"""Broker domain service: simple 1-1 agent orchestration (invoke + logging; quotas/timeouts via config)."""
+"""Broker domain service: agent invocation with logging, quotas, and timeouts."""
 
 import asyncio
 import time
@@ -41,7 +41,7 @@ def _extract_text(payload: dict) -> str:
 
 
 class BrokerService:
-    """Service for brokering agent invocations (1-1; config: quotas, timeouts, allowlist)."""
+    """Service for brokering agent invocations (quotas, timeouts, allowlist)."""
 
     def __init__(
         self,
@@ -67,18 +67,18 @@ class BrokerService:
         conversation_id: Optional[UUID] = None,
         message_id: Optional[UUID] = None,
     ) -> InvokeResponse:
-        """
-        Invoke an agent capability through the broker.
+        """Invoke an agent through the broker.
+
         :param invoke_request: InvokeRequest
         :param caller_user_id: UUID
         :param integration_id: Optional integration (from API key)
-        :param conversation_id: Optional conversation (from request, validated)
-        :param message_id: Optional message (from request, must belong to conversation)
+        :param conversation_id: Optional conversation
+        :param message_id: Optional message
         :return: InvokeResponse
         """
         start_time = time.time()
 
-        # Load effective broker config (integration override or global)
+        # Load effective broker config
         config = await self.broker_config_repository.get_effective_config(integration_id)
 
         # Resolve conversation_id and message_id from request if not passed
@@ -106,7 +106,7 @@ class BrokerService:
                 conversation.external_user_id = invoke_request.external_user_id
                 await self.conversation_repository.update(conversation)
         else:
-            # No conversation: create one for audit so invocation log has conversation_id
+            # Create conversation for audit trail
             conversation = Conversation(
                 user_id=caller_user_id,
                 integration_id=integration_id,
@@ -115,6 +115,7 @@ class BrokerService:
             )
             conversation = await self.conversation_repository.create(conversation)
             conv_id = conversation.id
+
         if msg_id is not None:
             if conv_id is None:
                 return InvokeResponse(
@@ -142,7 +143,7 @@ class BrokerService:
                 status_code=404,
             )
 
-        # Allowlist: if config has non-empty allowed_agent_ids, agent must be in list
+        # Allowlist check
         if config and config.allowed_agent_ids and len(config.allowed_agent_ids) > 0:
             if agent.id not in config.allowed_agent_ids:
                 return InvokeResponse(
@@ -152,7 +153,7 @@ class BrokerService:
                     status_code=403,
                 )
 
-        # Quota check: monthly and/or daily
+        # Quota check
         if config:
             now = datetime.now(timezone.utc)
             if config.monthly_invocation_quota is not None:
@@ -180,24 +181,9 @@ class BrokerService:
                         status_code=429,
                     )
 
-        # Find the capability
-        capability = None
-        for cap in agent.capabilities:
-            if cap.capability_id == invoke_request.capability_id:
-                capability = cap
-                break
-        
-        if not capability:
-            return InvokeResponse(
-                success=False,
-                error=f"Capability '{invoke_request.capability_id}' not found",
-                latency_ms=int((time.time() - start_time) * 1000),
-                status_code=404,
-            )
-
         request_payload = invoke_request.input or {}
 
-        # Brand agent: invoke via LLM inside Intuno (no external HTTP)
+        # Brand agent: invoke via LLM internally
         if getattr(agent, "is_brand_agent", False) and agent.brand_id:
             brand = await self.brand_repository.get_by_id(agent.brand_id)
             if brand:
@@ -231,7 +217,6 @@ class BrokerService:
                 invocation_log = InvocationLog(
                     caller_user_id=caller_user_id,
                     target_agent_id=agent.id,
-                    capability_id=invoke_request.capability_id,
                     request_payload=request_payload,
                     response_payload=response_data,
                     status_code=200 if success else 500,
@@ -251,7 +236,7 @@ class BrokerService:
                     conversation_id=conv_id,
                 )
 
-        # Persist the user message
+        # Persist user message
         if msg_id is None and conv_id is not None:
             user_message = await self.message_repository.create(
                 Message(
@@ -263,11 +248,9 @@ class BrokerService:
             )
             msg_id = user_message.id
 
-        # SSRF protection: validate invoke_endpoint before calling
+        # SSRF protection
         try:
             allowed = [h.strip() for h in settings.INVOKE_ENDPOINT_ALLOWED_HOSTS.split(",") if h.strip()]
-            if not allowed and settings.ENVIRONMENT == "development":
-                allowed = ["localhost", "127.0.0.1"]
             validate_invoke_endpoint(agent.invoke_endpoint, allowed_hosts=allowed if allowed else None)
         except ValueError as e:
             return InvokeResponse(
@@ -278,9 +261,7 @@ class BrokerService:
             )
 
         timeout_sec = (
-            float(config.request_timeout_seconds)
-            if config
-            else DEFAULT_REQUEST_TIMEOUT_SECONDS
+            float(config.request_timeout_seconds) if config else DEFAULT_REQUEST_TIMEOUT_SECONDS
         )
         max_retries = (config.max_retries or 0) if config else 0
         retry_backoff = (config.retry_backoff_seconds or 1) if config else 1
@@ -290,10 +271,8 @@ class BrokerService:
         success = False
         error: Optional[str] = None
 
-        # Resolve auth from credential (primary) or capability auth_type (fallback)
-        # Credential stores header/scheme alongside the key; manifest auth_type is fallback
-        auth_config = parse_auth_type_stored(capability.auth_type or "public")
-        auth_type = auth_config["type"].lower()
+        # Resolve auth from agent.auth_type + stored credentials
+        auth_type = (agent.auth_type or "public").lower()
         cred_type = "api_key" if auth_type in ("api_key", "public") else "bearer_token"
         cred = await self.registry_repository.get_agent_credential(agent.id, cred_type)
         cred_value: Optional[str] = None
@@ -303,16 +282,24 @@ class BrokerService:
                 cred_value = decrypt_credential(cred.encrypted_value)
             except ValueError:
                 cred_value = None
+
         if auth_type in ("api_key", "bearer_token") and not cred_value:
             return InvokeResponse(
                 success=False,
-                error="Agent requires API key; set via POST /registry/agents/{uuid}/credentials (auth_type=api_key/bearer_token)",
+                error="Agent requires credentials; set via POST /registry/agents/{uuid}/credentials",
                 latency_ms=int((time.time() - start_time) * 1000),
                 status_code=503,
             )
-        # Prefer credential's header/scheme; fall back to capability manifest
-        header_name = (cred.auth_header if cred and cred.auth_header else None) or auth_config.get("header", "X-API-Key")
-        scheme = (cred.auth_scheme if cred and cred.auth_scheme is not None else None) or auth_config.get("scheme", "")
+
+        # Determine auth header name and value
+        auth_defaults = {
+            "api_key": {"header": "X-API-Key", "scheme": ""},
+            "bearer_token": {"header": "Authorization", "scheme": "Bearer"},
+            "public": {"header": "X-API-Key", "scheme": ""},
+        }
+        defaults = auth_defaults.get(auth_type, auth_defaults["public"])
+        header_name = (cred.auth_header if cred and cred.auth_header else None) or defaults["header"]
+        scheme = (cred.auth_scheme if cred and cred.auth_scheme is not None else None) or defaults["scheme"]
         header_value = f"{scheme} {cred_value}".strip() if (cred_value and scheme) else (cred_value or "")
 
         for attempt in range(max_retries + 1):
@@ -321,7 +308,6 @@ class BrokerService:
                     headers = {
                         "Content-Type": "application/json",
                         "User-Agent": "Intuno-Broker/1.0",
-                        "X-Intuno-Capability-Id": invoke_request.capability_id,
                     }
                     if header_value:
                         headers[header_name] = header_value
@@ -346,7 +332,6 @@ class BrokerService:
                     success = False
                     error = f"Agent returned status {response.status_code}"
 
-                # Retry only on timeout or 5xx if we have retries left
                 if attempt < max_retries and (
                     response_status_code >= 500 or response_status_code == 408
                 ):
@@ -377,7 +362,7 @@ class BrokerService:
         if response_data is None:
             response_data = {"error": error or "Unknown error"}
 
-        # Persist the assistant message on success
+        # Persist assistant message on success
         if success and conv_id is not None and response_data:
             await self.message_repository.create(
                 Message(
@@ -388,11 +373,10 @@ class BrokerService:
                 )
             )
 
-        # Log the invocation
+        # Log invocation
         invocation_log = InvocationLog(
             caller_user_id=caller_user_id,
             target_agent_id=agent.id,
-            capability_id=invoke_request.capability_id,
             request_payload=request_payload,
             response_payload=response_data,
             status_code=response_status_code,
