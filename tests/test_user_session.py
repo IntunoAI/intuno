@@ -108,7 +108,6 @@ class UserSessionTestRunner:
         self.agent_id_str: Optional[str] = None
         self.agent_name: Optional[str] = None
         self.agent_description: Optional[str] = None
-        self.first_cap_id: Optional[str] = None
 
         self.alice_conv_id: Optional[str] = None
         self.bob_conv_id: Optional[str] = None
@@ -186,18 +185,15 @@ class UserSessionTestRunner:
                 self.agent_id_str = agent["agent_id"]
                 self.agent_name = agent["name"]
                 self.agent_description = agent.get("description", agent["name"])
-                caps = agent.get("capabilities", [])
-                if caps:
-                    self.first_cap_id = caps[0].get("id") or caps[0].get("capability_id")
 
         ok = all([
             self.jwt_token, self.personal_api_key, self.integration_api_key,
-            self.agent_id_str, self.first_cap_id,
+            self.agent_id_str,
         ])
         self._record(
             "Setup (user, keys, integration, agent)",
             ok,
-            f"agent={self.agent_id_str} cap={self.first_cap_id}",
+            f"agent={self.agent_id_str}",
         )
         return ok
 
@@ -205,7 +201,7 @@ class UserSessionTestRunner:
 
     async def scenario_alice_multiturn(self):
         """3-turn conversation with Alice via raw HTTP + integration API key."""
-        if not self.integration_api_key or not self.agent_id_str or not self.first_cap_id:
+        if not self.integration_api_key or not self.agent_id_str:
             self._skip("Alice multi-turn", "missing setup")
             return
 
@@ -220,7 +216,6 @@ class UserSessionTestRunner:
 
             payload: Dict[str, Any] = {
                 "agent_id": self.agent_id_str,
-                "capability_id": self.first_cap_id,
                 "input": {"message": user_msg},
                 "external_user_id": ALICE,
             }
@@ -261,7 +256,7 @@ class UserSessionTestRunner:
 
     async def scenario_bob_multiturn_sdk(self):
         """2-turn conversation with Bob via the Intuno SDK."""
-        if not self.integration_api_key or not self.agent_id_str or not self.first_cap_id:
+        if not self.integration_api_key or not self.agent_id_str:
             self._skip("Bob multi-turn (SDK)", "missing setup")
             return
 
@@ -278,7 +273,6 @@ class UserSessionTestRunner:
                 try:
                     result = await sdk.ainvoke(
                         agent_id=self.agent_id_str,
-                        capability_id=self.first_cap_id,
                         input_data={"message": user_msg},
                         external_user_id=BOB,
                         conversation_id=conv_id,

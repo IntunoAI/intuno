@@ -24,6 +24,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from tests.test_utils import build_sample_input
+
 PASS = "\033[92mPASS\033[0m"
 FAIL = "\033[91mFAIL\033[0m"
 SKIP = "\033[93mSKIP\033[0m"
@@ -43,8 +45,7 @@ class WorkflowTestRunner:
 
         self.agent_uuid: Optional[str] = None
         self.agent_id_str: Optional[str] = None
-        self.first_capability_id: Optional[str] = None
-        self.first_capability_input_schema: Optional[Dict[str, Any]] = None
+        self.first_agent_input_schema: Optional[Dict[str, Any]] = None
 
     def _record(self, name: str, passed: bool, detail: str = ""):
         tag = PASS if passed else FAIL
@@ -170,26 +171,6 @@ class WorkflowTestRunner:
 
     # ── 4. Registry (read-only — agents already on server) ─────────────
 
-    @staticmethod
-    def _build_sample_input(input_schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-        """Build a minimal sample input dict from a JSON Schema."""
-        if not input_schema or input_schema.get("type") != "object":
-            return {}
-        props = input_schema.get("properties", {})
-        sample: Dict[str, Any] = {}
-        for key, spec in props.items():
-            t = spec.get("type", "string")
-            if t == "number" or t == "integer":
-                sample[key] = 1
-            elif t == "boolean":
-                sample[key] = True
-            elif t == "array":
-                sample[key] = []
-            elif t == "object":
-                sample[key] = {}
-            else:
-                sample[key] = "test"
-        return sample
 
     async def test_fetch_existing_agent(self):
         """Fetch an existing agent from the registry to use in subsequent tests."""
@@ -204,16 +185,12 @@ class WorkflowTestRunner:
             first = agents[0]
             self.agent_uuid = str(first["id"])
             self.agent_id_str = first["agent_id"]
-            caps = first.get("capabilities", [])
-            if caps:
-                cap = caps[0]
-                self.first_capability_id = cap.get("id") or cap.get("capability_id")
-                self.first_capability_input_schema = cap.get("input_schema")
+            self.first_agent_input_schema = first.get("input_schema")
         self._record(
             "GET /registry/agents (fetch existing)",
             ok and len(agents) >= 1,
             f"count={len(agents)}"
-            + (f" using agent_id={self.agent_id_str} cap={self.first_capability_id}" if self.agent_id_str else " NO AGENTS FOUND"),
+            + (f" using agent_id={self.agent_id_str}" if self.agent_id_str else " NO AGENTS FOUND"),
         )
 
     async def test_list_agents(self):
@@ -298,18 +275,17 @@ class WorkflowTestRunner:
     # ── 6. Broker invoke (single-user, personal key) ──────────────────
 
     async def test_broker_invoke_personal(self):
-        if not self.personal_api_key or not self.agent_id_str or not self.first_capability_id:
+        if not self.personal_api_key or not self.agent_id_str:
             self._skip(
                 "POST /broker/invoke (personal key)",
-                f"key={bool(self.personal_api_key)} agent={bool(self.agent_id_str)} cap={bool(self.first_capability_id)}",
+                f"key={bool(self.personal_api_key)} agent={bool(self.agent_id_str)}",
             )
             return
-        test_input = self._build_sample_input(self.first_capability_input_schema)
+        test_input = build_sample_input(self.first_agent_input_schema)
         r = await self.client.post(
             "/broker/invoke",
             json={
                 "agent_id": self.agent_id_str,
-                "capability_id": self.first_capability_id,
                 "input": test_input,
             },
             headers=self._api_key_headers(self.personal_api_key),
@@ -328,18 +304,17 @@ class WorkflowTestRunner:
     # ── 7. Broker invoke (multi-user, integration key + external_user_id)
 
     async def test_broker_invoke_multiuser(self) -> Optional[str]:
-        if not self.integration_api_key or not self.agent_id_str or not self.first_capability_id:
+        if not self.integration_api_key or not self.agent_id_str:
             self._skip(
                 "POST /broker/invoke (integration key)",
-                f"key={bool(self.integration_api_key)} agent={bool(self.agent_id_str)} cap={bool(self.first_capability_id)}",
+                f"key={bool(self.integration_api_key)} agent={bool(self.agent_id_str)}",
             )
             return None
-        test_input = self._build_sample_input(self.first_capability_input_schema)
+        test_input = build_sample_input(self.first_agent_input_schema)
         r = await self.client.post(
             "/broker/invoke",
             json={
                 "agent_id": self.agent_id_str,
-                "capability_id": self.first_capability_id,
                 "input": test_input,
                 "external_user_id": "end-user-alice",
             },
@@ -453,7 +428,7 @@ class WorkflowTestRunner:
         if not self.personal_api_key:
             self._skip("POST /tasks (sync)", "no api key")
             return
-        test_input = self._build_sample_input(self.first_capability_input_schema)
+        test_input = build_sample_input(self.first_agent_input_schema)
         r = await self.client.post(
             "/tasks",
             json={"goal": "Perform a simple calculation", "input": test_input},
@@ -475,7 +450,7 @@ class WorkflowTestRunner:
         if not self.personal_api_key:
             self._skip("POST /tasks (async)", "no api key")
             return None
-        test_input = self._build_sample_input(self.first_capability_input_schema)
+        test_input = build_sample_input(self.first_agent_input_schema)
         r = await self.client.post(
             "/tasks",
             params={"async": "true"},
