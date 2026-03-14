@@ -1,37 +1,49 @@
-version: '3.8'
+# Production stack: Redis + FastAPI API (Coolify-ready)
+# Postgres and Qdrant are external. Set vars in Coolify UI or .env for local.
+#
+# Coolify: variables with ${VAR} are auto-detected and editable in the UI
+# Local:  use .env or export vars before docker compose up
 
 services:
-  postgres:
-    image: postgres:15
-    container_name: wisdom-db
-    environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+  redis:
+    image: redis:7-alpine
+    container_name: wisdom-redis
     ports:
-      - "5432:5432"
+      - "6379:6379"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: wisdom-qdrant
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wisdom-api
     ports:
-      - "6333:6333"  # HTTP API
-      - "6334:6334"  # gRPC
-    volumes:
-      - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6333/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      REDIS_URL: redis://wisdom-redis:6379/0
+      ENVIRONMENT: production
+      # Coolify: matches vars in your UI (required: DATABASE_URL, QDRANT_URL, JWT_SECRET_KEY)
+      DATABASE_URL: ${DATABASE_URL:?}
+      QDRANT_URL: ${QDRANT_URL:?}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      ENABLE_LLM_ENHANCEMENT: ${ENABLE_LLM_ENHANCEMENT:-}
+      DASHBOARD_CACHE_TTL: ${DASHBOARD_CACHE_TTL:-}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-}
+      LOG_LEVEL: ${LOG_LEVEL:-}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
-  postgres_data:
-  qdrant_data:
+  redis_data:

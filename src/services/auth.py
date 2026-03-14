@@ -23,7 +23,8 @@ class AuthService:
         self.auth_repository = auth_repository
 
     def hash_password(self, password: str) -> str:
-        """Hash a password using bcrypt.
+        """
+        Hash a password using bcrypt.
         :param password: str
         :return: str
         """
@@ -34,7 +35,8 @@ class AuthService:
         return hashed.decode('utf-8')
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash using bcrypt.
+        """
+        Verify a password against its hash using bcrypt.
         :param plain_password: str
         :param hashed_password: str
         :return: bool
@@ -47,7 +49,8 @@ class AuthService:
             return False
 
     def create_access_token(self, user_id: UUID) -> str:
-        """Create a JWT access token.
+        """
+        Create a JWT access token.
         :param user_id: UUID
         :return: str
         """
@@ -60,7 +63,8 @@ class AuthService:
         return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
     def verify_token(self, token: str) -> Optional[UUID]:
-        """Verify a JWT token and return user ID.
+        """
+        Verify a JWT token and return user ID.
         :param token: str
         :return: Optional[UUID]
         """
@@ -74,7 +78,8 @@ class AuthService:
             return None
 
     async def register_user(self, user_data: UserRegister) -> User:
-        """Register a new user.
+        """
+        Register a new user.
         :param user_data: UserRegister
         :return: User
         """
@@ -96,7 +101,8 @@ class AuthService:
         return await self.auth_repository.create_user(user)
 
     async def authenticate_user(self, login_data: UserLogin) -> Optional[User]:
-        """Authenticate a user with email and password.
+        """
+        Authenticate a user with email and password.
         :param login_data: UserLogin
         :return: Optional[User]
         """
@@ -106,16 +112,24 @@ class AuthService:
         return user
 
     def _hash_api_key(self, api_key: str) -> str:
-        """Hash an API key using SHA256 (deterministic hash for lookup).
+        """
+        Hash an API key using SHA256 (deterministic hash for lookup).
         :param api_key: str
         :return: str
         """
         return hashlib.sha256(api_key.encode('utf-8')).hexdigest()
 
-    async def create_api_key(self, user_id: UUID, api_key_data: ApiKeyCreate) -> tuple[ApiKey, str]:
-        """Create a new API key for a user.
+    async def create_api_key(
+        self,
+        user_id: UUID,
+        api_key_data: ApiKeyCreate,
+        integration_id: Optional[UUID] = None,
+    ) -> tuple[ApiKey, str]:
+        """
+        Create a new API key for a user, optionally tied to an integration.
         :param user_id: UUID
         :param api_key_data: ApiKeyCreate
+        :param integration_id: Optional[UUID]
         :return: tuple[ApiKey, str]
         """
         # Generate a random API key
@@ -126,6 +140,7 @@ class AuthService:
         # Create API key record
         api_key_record = ApiKey(
             user_id=user_id,
+            integration_id=integration_id,
             key_hash=key_hash,
             name=api_key_data.name,
             expires_at=api_key_data.expires_at,
@@ -135,7 +150,8 @@ class AuthService:
         return created_key, api_key
 
     async def verify_api_key(self, api_key: str) -> Optional[User]:
-        """Verify an API key and return the associated user.
+        """
+        Verify an API key and return the associated user.
         :param api_key: str
         :return: Optional[User]
         """
@@ -157,15 +173,37 @@ class AuthService:
         # Get the user
         return await self.auth_repository.get_user_by_id(api_key_record.user_id)
 
+    async def verify_api_key_and_get_context(
+        self, api_key: str
+    ) -> Optional[tuple[User, Optional[UUID]]]:
+        """
+        Verify an API key and return (user, integration_id). integration_id is None for personal keys.
+        :param api_key: str
+        :return: Optional[tuple[User, Optional[UUID]]]
+        """
+        key_hash = self._hash_api_key(api_key)
+        api_key_record = await self.auth_repository.get_api_key_by_hash(key_hash)
+        if not api_key_record:
+            return None
+        if api_key_record.expires_at and api_key_record.expires_at < datetime.utcnow():
+            return None
+        await self.auth_repository.update_api_key_last_used(api_key_record.id)
+        user = await self.auth_repository.get_user_by_id(api_key_record.user_id)
+        if not user or not user.is_active:
+            return None
+        return (user, api_key_record.integration_id)
+
     async def get_user_api_keys(self, user_id: UUID) -> list[ApiKey]:
-        """Get all API keys for a user.
+        """
+        Get all API keys for a user.
         :param user_id: UUID
         :return: list[ApiKey]
         """
         return await self.auth_repository.get_api_keys_by_user_id(user_id)
 
     async def delete_api_key(self, user_id: UUID, key_id: UUID) -> bool:
-        """Delete an API key (only if owned by user).
+        """
+        Delete an API key (only if owned by user).
         :param user_id: UUID
         :param key_id: UUID
         :return: bool
@@ -175,8 +213,28 @@ class AuthService:
             return False
         return await self.auth_repository.delete_api_key(key_id)
 
+    async def delete_api_key_for_integration(
+        self, user_id: UUID, integration_id: UUID, key_id: UUID
+    ) -> bool:
+        """
+        Delete an API key only if owned by user and tied to the given integration.
+        :param user_id: UUID
+        :param integration_id: UUID
+        :param key_id: UUID
+        :return: bool
+        """
+        api_key = await self.auth_repository.get_api_key_by_id(key_id)
+        if (
+            not api_key
+            or api_key.user_id != user_id
+            or api_key.integration_id != integration_id
+        ):
+            return False
+        return await self.auth_repository.delete_api_key(key_id)
+
     async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
-        """Get a user by ID.
+        """
+        Get a user by ID.
         :param user_id: UUID
         :return: Optional[User]
         """

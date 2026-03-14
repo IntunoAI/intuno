@@ -1,16 +1,37 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.core.redis_client import close_redis, init_redis
 from src.core.settings import settings
+from src.routes.analytics import router as analytics_router
 from src.routes.auth import router as auth_router
+from src.routes.brand import router as brand_router
+from src.routes.dashboard import router as dashboard_router
 from src.routes.broker import router as broker_router
+from src.routes.conversation import router as conversation_router
 from src.routes.health import router as health_router
+from src.routes.integration import router as integration_router
+from src.routes.invocation_log import router as invocation_log_router
+from src.routes.message import router as message_router
 from src.routes.registry import router as registry_router
+from src.routes.task import router as task_router
+from src.mcp_app import create_mcp_app
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_redis()
+    yield
+    await close_redis()
+
 
 app = FastAPI(
     title="Intuno",
     description="Registry and broker for AI agent discovery and collaboration",
     version=settings.API_VERSION,
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -22,8 +43,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(health_router, tags=["Health"])
-app.include_router(auth_router, tags=["Authentication"])
-app.include_router(registry_router, tags=["Registry"])
-app.include_router(broker_router, tags=["Broker"])
+# Include routers (tags defined on each router)
+app.include_router(health_router)
+app.include_router(analytics_router)
+app.include_router(auth_router)
+app.include_router(brand_router)
+app.include_router(dashboard_router)
+app.include_router(integration_router)
+app.include_router(registry_router)
+app.include_router(broker_router)
+app.include_router(conversation_router)
+app.include_router(message_router)
+app.include_router(invocation_log_router)
+app.include_router(task_router)
+
+# MCP server: streamable HTTP at /mcp
+app.mount("/mcp", create_mcp_app())

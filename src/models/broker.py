@@ -1,33 +1,46 @@
-"""Broker domain models."""
+"""Broker domain: invoke orchestration + invocation logging; quotas, timeouts, policies."""
 
-from typing import Any, Dict, Optional
+from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import Column, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
+from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import ARRAY, UUID as PostgresUUID
 from sqlalchemy.orm import relationship
 
 from .base import BaseModel
+from .invocation_log import InvocationLog
 
 
-class InvocationLog(BaseModel):
-    """Represents a log of an agent invocation."""
+class BrokerConfig(BaseModel):
+    """
+    Per-integration or global broker config: timeouts, retries, quotas, allowlist.
+    integration_id is None for global defaults; one row per integration override.
+    Resolution: integration row if present, else global.
+    """
 
-    __tablename__: str = "invocation_logs"
+    __tablename__: str = "broker_configs"
 
-    caller_user_id: Column[UUID] = Column(
-        PostgresUUID, ForeignKey("users.id"), nullable=False
+    integration_id: Column[Optional[UUID]] = Column(
+        PostgresUUID, ForeignKey("integrations.id"), nullable=True, unique=True
     )
-    target_agent_id: Column[UUID] = Column(
-        PostgresUUID, ForeignKey("agents.id"), nullable=False
-    )
-    capability_id: Column[str] = Column(String, nullable=False)
-    request_payload: Column[Dict[str, Any]] = Column(JSONB, nullable=False)
-    response_payload: Column[Dict[str, Any]] = Column(JSONB, nullable=True)
-    status_code: Column[int] = Column(Integer, nullable=False)
-    latency_ms: Column[int] = Column(Integer, nullable=False)
-    error_message: Column[Optional[str]] = Column(Text, nullable=True)
 
-    # Relationships
-    caller_user = relationship("User", foreign_keys=[caller_user_id], overlaps="invocation_logs")
-    target_agent = relationship("Agent", back_populates="invocation_logs")
+    # Timeouts
+    request_timeout_seconds: Column[int] = Column(Integer, nullable=False, default=30)
+
+    # Retries (optional)
+    max_retries: Column[Optional[int]] = Column(Integer, nullable=True)
+    retry_backoff_seconds: Column[Optional[int]] = Column(Integer, nullable=True)
+
+    # Quotas (null = unlimited)
+    monthly_invocation_quota: Column[Optional[int]] = Column(Integer, nullable=True)
+    daily_invocation_quota: Column[Optional[int]] = Column(Integer, nullable=True)
+
+    # Allowlist: non-empty = only these agent UUIDs allowed; null/empty = allow all
+    allowed_agent_ids: Column[Optional[List[UUID]]] = Column(
+        ARRAY(PostgresUUID), nullable=True
+    )
+
+    integration = relationship("Integration", back_populates="broker_config")
+
+
+__all__ = ["BrokerConfig", "InvocationLog"]

@@ -9,42 +9,93 @@ from src.schemas.auth import (
     UserRegister,
     UserResponse,
 )
-from src.schemas.broker import (
-    InvocationLogResponse,
-    InvokeRequest,
-    InvokeResponse,
+from src.schemas.brand import (
+    BrandCreate,
+    BrandResponse,
+    BrandUpdate,
+    VerifyBrandRequest,
+    VerifyBrandResponse,
+)
+from src.schemas.broker import InvokeRequest, InvokeResponse
+from src.schemas.conversation import (
+    ConversationCreate,
+    ConversationListResponse,
+    ConversationResponse,
+    ConversationUpdate,
+)
+from src.schemas.integration import (
+    IntegrationCreate,
+    IntegrationListResponse,
+    IntegrationResponse,
+)
+from src.schemas.invocation_log import InvocationLogResponse
+from src.schemas.message import (
+    MessageCreate,
+    MessageListResponse,
+    MessageResponse,
+)
+from src.schemas.task import (
+    StepSchema,
+    TaskCreate,
+    TaskListResponse,
+    TaskResponse,
 )
 from src.schemas.registry import (
-    AgentCreate,
     AgentListResponse,
-    AgentManifest,
+    AgentRegistration,
     AgentResponse,
     AgentSearchQuery,
     AgentUpdate,
-    CapabilitySchema,
     DiscoverQuery,
+    RateRequest,
+    RatingResponse,
 )
 
 __all__ = [
-    # Auth schemas
-    "UserRegister",
-    "UserLogin",
-    "TokenResponse",
+    # Auth
     "ApiKeyCreate",
-    "ApiKeyResponse",
     "ApiKeyListResponse",
+    "ApiKeyResponse",
+    "TokenResponse",
+    "UserLogin",
+    "UserRegister",
     "UserResponse",
-    # Registry schemas
-    "AgentManifest",
-    "CapabilitySchema",
-    "AgentResponse",
-    "AgentListResponse",
-    "AgentSearchQuery",
-    "DiscoverQuery",
-    "AgentCreate",
-    "AgentUpdate",
-    # Broker schemas
+    # Brand
+    "BrandCreate",
+    "BrandResponse",
+    "BrandUpdate",
+    "VerifyBrandRequest",
+    "VerifyBrandResponse",
+    # Broker
     "InvokeRequest",
     "InvokeResponse",
+    # Conversation
+    "ConversationCreate",
+    "ConversationListResponse",
+    "ConversationResponse",
+    "ConversationUpdate",
+    # Integration
+    "IntegrationCreate",
+    "IntegrationListResponse",
+    "IntegrationResponse",
+    # Invocation log
     "InvocationLogResponse",
+    # Message
+    "MessageCreate",
+    "MessageListResponse",
+    "MessageResponse",
+    # Task
+    "StepSchema",
+    "TaskCreate",
+    "TaskListResponse",
+    "TaskResponse",
+    # Registry
+    "AgentRegistration",
+    "AgentListResponse",
+    "AgentResponse",
+    "AgentSearchQuery",
+    "AgentUpdate",
+    "DiscoverQuery",
+    "RateRequest",
+    "RatingResponse",
 ]
