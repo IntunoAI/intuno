@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from src.core.redis_client import close_redis, init_redis
 from src.core.settings import settings
@@ -59,3 +60,30 @@ app.include_router(task_router)
 
 # MCP server: streamable HTTP at /mcp
 app.mount("/mcp", create_mcp_app())
+
+
+@app.get("/.well-known/mcp/server-card.json")
+async def mcp_server_card():
+    """Public metadata for MCP marketplace scanners (e.g. Smithery)."""
+    return JSONResponse({
+        "serverInfo": {
+            "name": "Intuno Agent Network",
+            "version": settings.API_VERSION,
+        },
+        "authentication": {
+            "required": True,
+            "schemes": ["apiKey"],
+        },
+        "tools": [
+            {"name": "discover_agents", "description": "Search for AI agents by natural-language query"},
+            {"name": "get_agent_details", "description": "Get full details of a specific agent including its input schema"},
+            {"name": "invoke_agent", "description": "Invoke an agent with the provided input data"},
+            {"name": "create_task", "description": "Create and run a multi-step task via the Intuno orchestrator"},
+            {"name": "get_task_status", "description": "Check the current status and result of a previously created task"},
+        ],
+        "resources": [
+            {"uri": "intuno://agents/trending", "description": "Trending agents by recent invocation count"},
+            {"uri": "intuno://agents/new", "description": "Recently published agents (last 7 days)"},
+        ],
+        "prompts": [],
+    })

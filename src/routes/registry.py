@@ -27,12 +27,13 @@ from src.utilities.manifest_generator import ManifestGenerationError, generate_a
 router = APIRouter(prefix="/registry", tags=["Registry"])
 
 
-def _build_agent_response(agent, rating_avg=None, rating_count=0, quality_sr=None, quality_lat=None, quality_count=0) -> AgentResponse:
+def _build_agent_response(agent, rating_avg=None, rating_count=0, quality_sr=None, quality_lat=None, quality_count=0, has_credentials=False) -> AgentResponse:
     return AgentResponse(
         id=agent.id,
         agent_id=agent.agent_id,
         name=agent.name,
         description=agent.description,
+        version=getattr(agent, "version", "1.0.0") or "1.0.0",
         endpoint=agent.invoke_endpoint,
         auth_type=agent.auth_type,
         input_schema=agent.input_schema,
@@ -40,6 +41,7 @@ def _build_agent_response(agent, rating_avg=None, rating_count=0, quality_sr=Non
         category=getattr(agent, "category", None),
         trust_verification=agent.trust_verification,
         is_active=agent.is_active,
+        has_credentials=has_credentials,
         created_at=agent.created_at,
         updated_at=agent.updated_at,
         rating_avg=round(rating_avg, 2) if rating_avg is not None else None,
@@ -50,12 +52,13 @@ def _build_agent_response(agent, rating_avg=None, rating_count=0, quality_sr=Non
     )
 
 
-def _build_list_response(agent, rating_avg=None, rating_count=0, quality_sr=None, quality_lat=None, quality_count=0, similarity_score=None, invocation_count=None) -> AgentListResponse:
+def _build_list_response(agent, rating_avg=None, rating_count=0, quality_sr=None, quality_lat=None, quality_count=0, similarity_score=None, invocation_count=None, has_credentials=False) -> AgentListResponse:
     return AgentListResponse(
         id=agent.id,
         agent_id=agent.agent_id,
         name=agent.name,
         description=agent.description,
+        version=getattr(agent, "version", "1.0.0") or "1.0.0",
         endpoint=agent.invoke_endpoint,
         auth_type=agent.auth_type,
         input_schema=agent.input_schema,
@@ -63,6 +66,7 @@ def _build_list_response(agent, rating_avg=None, rating_count=0, quality_sr=None
         category=getattr(agent, "category", None),
         trust_verification=agent.trust_verification,
         is_active=agent.is_active,
+        has_credentials=has_credentials,
         created_at=agent.created_at,
         similarity_score=similarity_score,
         rating_avg=round(rating_avg, 2) if rating_avg is not None else None,
@@ -295,8 +299,11 @@ async def get_agent(
     if not agent:
         raise NotFoundException("Agent")
 
-    rating_avg, rating_count = await registry_service.get_rating_aggregate(agent.id)
-    quality_sr, quality_lat, quality_count = await registry_service.get_agent_quality_metrics(agent.id)
+    (rating_avg, rating_count), (quality_sr, quality_lat, quality_count), agent_has_credentials = await asyncio.gather(
+        registry_service.get_rating_aggregate(agent.id),
+        registry_service.get_agent_quality_metrics(agent.id),
+        registry_service.has_credentials(agent.id, agent.auth_type),
+    )
 
     return _build_agent_response(
         agent,
@@ -305,6 +312,7 @@ async def get_agent(
         quality_sr=quality_sr,
         quality_lat=quality_lat,
         quality_count=quality_count,
+        has_credentials=agent_has_credentials,
     )
 
 
@@ -324,8 +332,11 @@ async def update_agent(
             current_user.id,
             enhance=enhance,
         )
-        rating_avg, rating_count = await registry_service.get_rating_aggregate(agent.id)
-        quality_sr, quality_lat, quality_count = await registry_service.get_agent_quality_metrics(agent.id)
+        (rating_avg, rating_count), (quality_sr, quality_lat, quality_count), agent_has_credentials = await asyncio.gather(
+            registry_service.get_rating_aggregate(agent.id),
+            registry_service.get_agent_quality_metrics(agent.id),
+            registry_service.has_credentials(agent.id, agent.auth_type),
+        )
         return _build_agent_response(
             agent,
             rating_avg=rating_avg,
@@ -333,6 +344,7 @@ async def update_agent(
             quality_sr=quality_sr,
             quality_lat=quality_lat,
             quality_count=quality_count,
+            has_credentials=agent_has_credentials,
         )
     except ValueError as e:
         raise BadRequestException(str(e))
@@ -440,9 +452,10 @@ async def get_agents_by_user_id(
     """Get current user's agents."""
     agents = await registry_service.get_agents_by_user_id(current_user.id)
     agent_ids = [a.id for a in agents]
-    rating_aggregates, quality_metrics = await asyncio.gather(
+    rating_aggregates, quality_metrics, cred_status = await asyncio.gather(
         registry_service.get_rating_aggregates_bulk(agent_ids),
         registry_service.get_agent_quality_metrics_bulk(agent_ids),
+        registry_service.get_credential_status_bulk({a.id: a.auth_type for a in agents}),
     )
 
     return [
@@ -453,6 +466,7 @@ async def get_agents_by_user_id(
             quality_sr=quality_metrics.get(agent.id, (None, None, 0))[0],
             quality_lat=quality_metrics.get(agent.id, (None, None, 0))[1],
             quality_count=quality_metrics.get(agent.id, (None, None, 0))[2],
+            has_credentials=cred_status.get(agent.id, False),
         )
         for agent in agents
     ]

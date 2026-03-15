@@ -273,33 +273,33 @@ class BrokerService:
 
         # Resolve auth from agent.auth_type + stored credentials
         auth_type = (agent.auth_type or "public").lower()
-        cred_type = "api_key" if auth_type in ("api_key", "public") else "bearer_token"
-        cred = await self.registry_repository.get_agent_credential(agent.id, cred_type)
+        cred: Optional[object] = None
         cred_value: Optional[str] = None
-        if cred:
-            try:
-                from src.core.credential_crypto import decrypt_credential
-                cred_value = decrypt_credential(cred.encrypted_value)
-            except ValueError:
-                cred_value = None
+        if auth_type in ("api_key", "bearer_token"):
+            cred = await self.registry_repository.get_agent_credential(agent.id, auth_type)
+            if cred:
+                try:
+                    from src.core.credential_crypto import decrypt_credential
+                    cred_value = decrypt_credential(cred.encrypted_value)
+                except ValueError:
+                    cred_value = None
 
-        if auth_type in ("api_key", "bearer_token") and not cred_value:
-            return InvokeResponse(
-                success=False,
-                error="Agent requires credentials; set via POST /registry/agents/{uuid}/credentials",
-                latency_ms=int((time.time() - start_time) * 1000),
-                status_code=503,
-            )
+            if not cred_value:
+                return InvokeResponse(
+                    success=False,
+                    error="Agent requires credentials; set via POST /registry/agents/{uuid}/credentials",
+                    latency_ms=int((time.time() - start_time) * 1000),
+                    status_code=503,
+                )
 
-        # Determine auth header name and value
+        # Determine auth header name and value (public agents send no auth header)
         auth_defaults = {
             "api_key": {"header": "X-API-Key", "scheme": ""},
             "bearer_token": {"header": "Authorization", "scheme": "Bearer"},
-            "public": {"header": "X-API-Key", "scheme": ""},
         }
-        defaults = auth_defaults.get(auth_type, auth_defaults["public"])
-        header_name = (cred.auth_header if cred and cred.auth_header else None) or defaults["header"]
-        scheme = (cred.auth_scheme if cred and cred.auth_scheme is not None else None) or defaults["scheme"]
+        defaults = auth_defaults.get(auth_type, {})
+        header_name = (cred.auth_header if cred and cred.auth_header else None) or defaults.get("header", "")
+        scheme = (cred.auth_scheme if cred and cred.auth_scheme is not None else None) or defaults.get("scheme", "")
         header_value = f"{scheme} {cred_value}".strip() if (cred_value and scheme) else (cred_value or "")
 
         for attempt in range(max_retries + 1):

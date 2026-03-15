@@ -299,3 +299,45 @@ class RegistryRepository:
             await self.session.delete(c)
         await self.session.commit()
         return len(creds)
+
+    async def has_credentials(self, agent_id: UUID, auth_type: str) -> bool:
+        """Return True if the agent has a credential matching its auth_type with a real value."""
+        if auth_type == "public":
+            return True
+        result = await self.session.execute(
+            select(AgentCredential.id).where(
+                AgentCredential.agent_id == agent_id,
+                AgentCredential.credential_type == auth_type,
+                AgentCredential.encrypted_value.isnot(None),
+                AgentCredential.encrypted_value != "",
+            ).limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def get_credential_status_bulk(self, agent_auth_types: Dict[UUID, str]) -> Dict[UUID, bool]:
+        """Return a mapping of agent UUID → whether a matching real credential exists."""
+        if not agent_auth_types:
+            return {}
+
+        out: Dict[UUID, bool] = {
+            aid: True for aid, auth_type in agent_auth_types.items() if auth_type == "public"
+        }
+
+        non_public = {aid: auth_type for aid, auth_type in agent_auth_types.items() if auth_type != "public"}
+        if not non_public:
+            return out
+
+        rows = await self.session.execute(
+            select(AgentCredential.agent_id, AgentCredential.credential_type)
+            .where(
+                AgentCredential.agent_id.in_(non_public.keys()),
+                AgentCredential.encrypted_value.isnot(None),
+                AgentCredential.encrypted_value != "",
+            )
+        )
+        valid_creds = {(row[0], row[1]) for row in rows}
+
+        for aid, auth_type in non_public.items():
+            out[aid] = (aid, auth_type) in valid_creds
+
+        return out

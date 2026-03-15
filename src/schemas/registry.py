@@ -118,6 +118,7 @@ class AgentResponse(BaseModel):
     agent_id: str
     name: str
     description: str
+    version: str = Field(default="1.0.0")
     endpoint: str
     auth_type: str
     input_schema: Optional[Dict[str, Any]] = None
@@ -125,6 +126,7 @@ class AgentResponse(BaseModel):
     category: Optional[str] = None
     trust_verification: str
     is_active: bool
+    has_credentials: bool = Field(default=False)
     created_at: datetime
     updated_at: datetime
     rating_avg: Optional[float] = Field(default=None)
@@ -141,6 +143,7 @@ class AgentListResponse(BaseModel):
     agent_id: str
     name: str
     description: str
+    version: str = Field(default="1.0.0")
     endpoint: str
     auth_type: str
     input_schema: Optional[Dict[str, Any]] = None
@@ -148,6 +151,7 @@ class AgentListResponse(BaseModel):
     category: Optional[str] = None
     trust_verification: str
     is_active: bool
+    has_credentials: bool = Field(default=False)
     created_at: datetime
     similarity_score: Optional[float] = Field(
         default=None,

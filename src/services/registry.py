@@ -334,6 +334,14 @@ class RegistryService:
             raise ValueError("Not authorized to delete credentials for this agent")
         return await self.registry_repository.delete_agent_credentials(agent_uuid)
 
+    async def has_credentials(self, agent_uuid: UUID, auth_type: str) -> bool:
+        """Return True if the agent has a matching credential configured."""
+        return await self.registry_repository.has_credentials(agent_uuid, auth_type)
+
+    async def get_credential_status_bulk(self, agent_auth_types: Dict[UUID, str]) -> Dict[UUID, bool]:
+        """Return a mapping of agent UUID → whether a matching credential exists."""
+        return await self.registry_repository.get_credential_status_bulk(agent_auth_types)
+
     async def delete_agent(self, agent_uuid: UUID, user_id: UUID) -> bool:
         """Delete an agent (owner or brand owner only)."""
         agent = await self.registry_repository.get_agent_by_id(agent_uuid)
