@@ -117,6 +117,29 @@ async def update_brand(
         raise BadRequestException(str(e))
 
 
+@router.delete(
+    "/{brand_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_brand(
+    brand_id: UUID,
+    current_user: User = Depends(get_current_user),
+    brand_service: BrandService = Depends(),
+) -> None:
+    """
+    Delete a brand. Owner only.
+    :param brand_id: UUID
+    :param current_user: User
+    :param brand_service: BrandService
+    """
+    try:
+        await brand_service.delete(brand_id, current_user.id)
+    except ValueError as e:
+        raise BadRequestException(str(e))
+    except ForbiddenException:
+        raise
+
+
 @router.post(
     "/{brand_id}/resend-verification",
     status_code=status.HTTP_204_NO_CONTENT,

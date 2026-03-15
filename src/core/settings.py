@@ -44,13 +44,16 @@ class Settings(BaseSettings):
     # Brand agent: LLM for conversational responses (uses OPENAI_API_KEY)
     BRAND_AGENT_LLM_MODEL: str = "gpt-4o-mini"
     # Placeholder invoke URL for brand agents (never called; add to INVOKE_ENDPOINT_ALLOWED_HOSTS if needed)
-    BRAND_AGENT_PLACEHOLDER_URL: str = "https://brand-agent.internal/invoke"
-    
+    BRAND_AGENT_PLACEHOLDER_URL: str = "https://brand-agent.internal/"
+
     # Embedding Configuration
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_VERSION: str = "1.0"  # Version of embedding structure/format
 
-    # Brand verification (email code expiry; provider config added later)
+    # Brand verification email (Resend provider)
+    RESEND_API_KEY: str = ""
+    EMAIL_FROM_ADDRESS: str = "noreply@example.com"
+    EMAIL_FROM_NAME: str = "Wisdom"
     BRAND_VERIFICATION_CODE_EXPIRY_MINUTES: int = 15
 
     # Task (orchestrator) timeout – global task-level timeout in seconds

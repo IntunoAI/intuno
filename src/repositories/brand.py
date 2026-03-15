@@ -70,3 +70,11 @@ class BrandRepository:
         await self.session.commit()
         await self.session.refresh(brand)
         return brand
+
+    async def delete(self, brand: Brand) -> None:
+        """
+        Delete brand.
+        :param brand: Brand
+        """
+        await self.session.delete(brand)
+        await self.session.commit()

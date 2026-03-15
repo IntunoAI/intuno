@@ -16,6 +16,7 @@ class BrandCreate(BaseModel):
     website: Optional[str] = None
     logo_url: Optional[str] = None
     verification_email: Optional[EmailStr] = None
+    brand_details: Optional[str] = None  # JSON string with structured business info
 
 
 class BrandUpdate(BaseModel):
@@ -27,6 +28,7 @@ class BrandUpdate(BaseModel):
     website: Optional[str] = None
     logo_url: Optional[str] = None
     verification_email: Optional[EmailStr] = None
+    brand_details: Optional[str] = None  # JSON string with structured business info
 
 
 class BrandResponse(BaseModel):
@@ -42,6 +44,7 @@ class BrandResponse(BaseModel):
     website: Optional[str] = None
     logo_url: Optional[str] = None
     verification_email: Optional[str] = None
+    brand_details: Optional[str] = None
     verification_status: str
     verified_at: Optional[datetime] = None
     created_at: datetime

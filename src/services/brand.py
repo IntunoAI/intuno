@@ -109,7 +109,22 @@ class BrandService:
             brand.logo_url = data.logo_url
         if data.verification_email is not None:
             brand.verification_email = data.verification_email
+        if data.brand_details is not None:
+            brand.brand_details = data.brand_details
         return await self.brand_repository.update(brand)
+
+    async def delete(self, brand_id: UUID, owner_id: UUID) -> None:
+        """
+        Delete a brand. Owner only.
+        :param brand_id: UUID
+        :param owner_id: UUID
+        """
+        brand = await self.brand_repository.get_by_id(brand_id)
+        if not brand:
+            raise ValueError("Brand not found")
+        if brand.owner_id != owner_id:
+            raise ForbiddenException("Not the brand owner")
+        await self.brand_repository.delete(brand)
 
     def _resend_cooldown_ok(self, brand: Brand) -> bool:
         """
@@ -154,11 +169,19 @@ class BrandService:
         brand.verification_status = "pending"
         await self.brand_repository.update(brand)
 
-        send_brand_verification_code(
-            to_email=brand.verification_email,
-            code=code,
-            expires_at=expires_at,
-        )
+        try:
+            await send_brand_verification_code(
+                to_email=brand.verification_email,
+                code=code,
+                expires_at=expires_at,
+            )
+        except Exception as exc:
+            # Roll back the code so the user can retry cleanly
+            brand.verification_code = None
+            brand.verification_code_expires_at = None
+            brand.verification_status = "pending"
+            await self.brand_repository.update(brand)
+            raise ValueError("Failed to send verification email. Please try again.") from exc
         return brand
 
     async def verify_code(self, brand_id: UUID, code: str, owner_id: UUID) -> Brand:

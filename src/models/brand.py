@@ -25,6 +25,7 @@ class Brand(BaseModel):
     website: Column[Optional[str]] = Column(String, nullable=True)
     logo_url: Column[Optional[str]] = Column(String, nullable=True)
     verification_email: Column[Optional[str]] = Column(String, nullable=True)
+    brand_details: Column[Optional[str]] = Column(Text, nullable=True)  # Free-text: anything the brand agent should know
     verification_code: Column[Optional[str]] = Column(String, nullable=True)
     verification_code_expires_at: Column[Optional[datetime]] = Column(
         DateTime(timezone=True), nullable=True

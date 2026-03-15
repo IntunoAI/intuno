@@ -126,6 +126,7 @@ class AgentResponse(BaseModel):
     category: Optional[str] = None
     trust_verification: str
     is_active: bool
+    is_brand_agent: bool = Field(default=False)
     has_credentials: bool = Field(default=False)
     created_at: datetime
     updated_at: datetime
@@ -151,6 +152,7 @@ class AgentListResponse(BaseModel):
     category: Optional[str] = None
     trust_verification: str
     is_active: bool
+    is_brand_agent: bool = Field(default=False)
     has_credentials: bool = Field(default=False)
     created_at: datetime
     similarity_score: Optional[float] = Field(
