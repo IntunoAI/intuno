@@ -1,4 +1,4 @@
-"""Economy model base — re-exports wisdom's shared Base and provides mixins."""
+"""Economy model mixins."""
 
 import uuid
 from datetime import datetime
@@ -6,10 +6,6 @@ from datetime import datetime
 from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
-
-# Re-export wisdom's shared declarative base so all economy models
-# register on the same metadata as the rest of the application.
-from src.models.base import Base  # noqa: F401
 
 
 class TimestampMixin:

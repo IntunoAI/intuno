@@ -5,7 +5,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_db
-from src.economy.models.agent import Agent
+from src.models.registry import Agent
 
 
 class AgentRepository:

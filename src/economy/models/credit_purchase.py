@@ -4,7 +4,8 @@ from sqlalchemy import Integer, String, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.economy.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from src.models.base import Base
+from src.economy.models.base import TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class CreditPurchase(Base, UUIDPrimaryKeyMixin, TimestampMixin):
