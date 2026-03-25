@@ -106,7 +106,7 @@ class AuthService:
         return created_user
 
     async def _provision_wallet(self, user: User) -> None:
-        """Create an economy wallet with welcome credits for a new user."""
+        """Create a user-level economy wallet with welcome credits."""
         import logging
 
         logger = logging.getLogger(__name__)
@@ -119,7 +119,8 @@ class AuthService:
             wallet_repo = WalletRepository(session)
 
             wallet = Wallet(
-                agent_id=user.id,
+                user_id=user.id,
+                wallet_type="user",
                 balance=settings.ECONOMY_WELCOME_BONUS_CREDITS,
             )
             created_wallet = await wallet_repo.create(wallet)

@@ -56,7 +56,7 @@ class AgentService:
         )
         agent = await self.agent_repository.create(agent)
 
-        wallet = Wallet(agent_id=agent.id, balance=0)
+        wallet = Wallet(agent_id=agent.id, wallet_type="agent", balance=0)
         wallet = await self.wallet_repository.create(wallet)
 
         total_grant = 0

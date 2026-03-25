@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_db
 from src.economy.models.wallet import Wallet, Transaction
+from src.models.registry import Agent
 
 
 class WalletRepository:
@@ -28,17 +29,66 @@ class WalletRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_agent_id(self, agent_id: uuid.UUID) -> Wallet | None:
-        """Return the wallet belonging to a specific agent."""
+    async def get_by_user_id(self, user_id: uuid.UUID) -> Wallet | None:
+        """Return the user-level wallet for a given user."""
         result = await self.db_session.execute(
-            select(Wallet).where(Wallet.agent_id == agent_id)
+            select(Wallet).where(
+                Wallet.user_id == user_id,
+                Wallet.wallet_type == "user",
+            )
         )
         return result.scalar_one_or_none()
+
+    async def get_by_agent_id(self, agent_id: uuid.UUID) -> Wallet | None:
+        """Return the agent-level wallet for a specific agent."""
+        result = await self.db_session.execute(
+            select(Wallet).where(
+                Wallet.agent_id == agent_id,
+                Wallet.wallet_type == "agent",
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_agent_wallets_for_user(
+        self,
+        user_id: uuid.UUID,
+        agent_ids: list[uuid.UUID] | None = None,
+    ) -> list[Wallet]:
+        """Return all agent wallets owned by a user (via agents table)."""
+        stmt = (
+            select(Wallet)
+            .join(Agent, Wallet.agent_id == Agent.id)
+            .where(Agent.user_id == user_id, Wallet.wallet_type == "agent")
+        )
+        if agent_ids:
+            stmt = stmt.where(Wallet.agent_id.in_(agent_ids))
+        result = await self.db_session.execute(stmt)
+        return list(result.scalars().all())
 
     async def update_balance(self, wallet_id: uuid.UUID, new_balance: int) -> None:
         """Set the wallet balance to an exact value."""
         await self.db_session.execute(
             update(Wallet).where(Wallet.id == wallet_id).values(balance=new_balance)
+        )
+
+    async def atomic_debit(self, wallet_id: uuid.UUID, amount: int) -> bool:
+        """Atomically debit *amount* credits if balance is sufficient.
+
+        Returns True if the debit succeeded, False if insufficient funds.
+        """
+        result = await self.db_session.execute(
+            update(Wallet)
+            .where(Wallet.id == wallet_id, Wallet.balance >= amount)
+            .values(balance=Wallet.balance - amount)
+        )
+        return result.rowcount == 1
+
+    async def atomic_credit(self, wallet_id: uuid.UUID, amount: int) -> None:
+        """Atomically credit *amount* credits to a wallet."""
+        await self.db_session.execute(
+            update(Wallet)
+            .where(Wallet.id == wallet_id)
+            .values(balance=Wallet.balance + amount)
         )
 
     async def create_transaction(self, transaction: Transaction) -> Transaction:
@@ -77,6 +127,7 @@ class WalletRepository:
             func.sum(
                 case(
                     (Transaction.tx_type.like("grant_%"), Transaction.amount),
+                    (Transaction.tx_type == "welcome_grant", Transaction.amount),
                     else_=0,
                 )
             ),
@@ -95,6 +146,8 @@ class WalletRepository:
             func.sum(
                 case(
                     (Transaction.tx_type == "settlement_credit", Transaction.amount),
+                    (Transaction.tx_type == "invocation_credit", Transaction.amount),
+                    (Transaction.tx_type == "consolidation_in", Transaction.amount),
                     else_=0,
                 )
             ),
@@ -104,6 +157,8 @@ class WalletRepository:
             func.sum(
                 case(
                     (Transaction.tx_type == "settlement_debit", func.abs(Transaction.amount)),
+                    (Transaction.tx_type == "invocation_debit", func.abs(Transaction.amount)),
+                    (Transaction.tx_type == "consolidation_out", func.abs(Transaction.amount)),
                     else_=0,
                 )
             ),

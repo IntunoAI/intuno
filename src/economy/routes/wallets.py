@@ -5,16 +5,65 @@ from fastapi import APIRouter, Depends, Query
 from src.core.auth import get_current_user
 from src.models.auth import User
 from src.economy.schemas.wallet import (
+    ConsolidateRequest,
+    ConsolidateResponse,
     CreditDebitRequest,
     GrantRequest,
     TransactionResponse,
     TransferRequest,
+    UserWalletOverview,
     WalletResponse,
     WalletSummary,
 )
 from src.economy.services.wallets import WalletService
 
 router = APIRouter()
+
+
+# ── /me endpoints (must be before /{wallet_id} to avoid path conflict) ──
+
+
+@router.get("/me", response_model=WalletResponse)
+async def get_my_wallet(
+    user: User = Depends(get_current_user),
+    wallet_service: WalletService = Depends(),
+) -> WalletResponse:
+    """Return the authenticated user's main wallet."""
+    return await wallet_service.get_wallet_by_user(user.id)
+
+
+@router.get("/me/agents", response_model=list[WalletResponse])
+async def get_my_agent_wallets(
+    user: User = Depends(get_current_user),
+    wallet_service: WalletService = Depends(),
+) -> list[WalletResponse]:
+    """List all agent wallets owned by the authenticated user."""
+    wallets = await wallet_service.wallet_repository.get_agent_wallets_for_user(user.id)
+    return [WalletResponse.model_validate(w) for w in wallets]
+
+
+@router.get("/me/overview", response_model=UserWalletOverview)
+async def get_my_wallet_overview(
+    user: User = Depends(get_current_user),
+    wallet_service: WalletService = Depends(),
+) -> UserWalletOverview:
+    """Return user wallet plus all agent wallet summaries."""
+    return await wallet_service.get_user_wallet_overview(user.id)
+
+
+@router.post("/me/consolidate", response_model=ConsolidateResponse)
+async def consolidate_my_agent_wallets(
+    payload: ConsolidateRequest = ConsolidateRequest(),
+    user: User = Depends(get_current_user),
+    wallet_service: WalletService = Depends(),
+) -> ConsolidateResponse:
+    """Sweep agent wallet balances into the user's main wallet."""
+    return await wallet_service.consolidate_agent_wallets(
+        user.id, agent_ids=payload.agent_ids,
+    )
+
+
+# ── Admin / direct-access endpoints ─────────────────────────────────
 
 
 @router.get("", response_model=list[WalletResponse])

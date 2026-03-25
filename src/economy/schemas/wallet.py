@@ -17,7 +17,9 @@ class WalletResponse(BaseModel):
     model_config = {"from_attributes": True}
 
     id: uuid.UUID
-    agent_id: uuid.UUID
+    user_id: uuid.UUID | None = None
+    agent_id: uuid.UUID | None = None
+    wallet_type: str
     balance: int
     created_at: datetime
     updated_at: datetime
@@ -71,6 +73,42 @@ class GrantRequest(BaseModel):
     amount: int = Field(..., gt=0)
     grant_type: GrantType = GrantType.promotional
     description: str | None = None
+
+
+class ConsolidateRequest(BaseModel):
+    """Request to sweep agent wallet balances into the user wallet."""
+
+    agent_ids: list[uuid.UUID] | None = Field(
+        default=None,
+        description="Agent IDs to sweep. None = sweep all agent wallets.",
+    )
+
+
+class ConsolidateResponse(BaseModel):
+    """Result of a consolidation sweep."""
+
+    reference_id: uuid.UUID
+    total_swept: int
+    wallets_swept: int
+
+
+class AgentWalletSummary(BaseModel):
+    """Compact view of an agent wallet for the overview endpoint."""
+
+    model_config = {"from_attributes": True}
+
+    wallet_id: uuid.UUID
+    agent_id: uuid.UUID
+    agent_name: str | None = None
+    balance: int
+
+
+class UserWalletOverview(BaseModel):
+    """User wallet plus all associated agent wallet summaries."""
+
+    wallet: WalletResponse
+    agent_wallets: list[AgentWalletSummary] = Field(default_factory=list)
+    total_agent_balance: int = 0
 
 
 class CreditPackageResponse(BaseModel):

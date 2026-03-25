@@ -414,48 +414,42 @@ class BrokerService:
     ) -> int | None:
         """Settle credits from caller to agent owner after a paid invocation.
 
+        Debits the caller's **user wallet** and credits the invoked
+        **agent wallet** (auto-created if it doesn't exist yet).
+
         Returns the number of credits charged, or None if settlement failed.
         """
         import logging
+        import uuid as _uuid
+
+        from src.economy.models.wallet import Transaction, Wallet
+        from src.economy.repositories.wallets import WalletRepository
 
         logger = logging.getLogger(__name__)
 
         try:
-            from src.economy.repositories.wallets import WalletRepository
-            from src.economy.models.wallet import Transaction
-            from sqlalchemy.ext.asyncio import AsyncSession
-            import uuid
-
-            # Get the session from the registry repository
-            session: AsyncSession = self.registry_repository.session
+            session = self.registry_repository.session
             wallet_repo = WalletRepository(session)
 
-            # Find caller's wallet (by user_id — wallets are keyed by agent_id
-            # in the economy module, but for user-level billing we look up by
-            # user_id).  For now, look up by caller_user_id.
-            caller_wallet = await wallet_repo.get_by_agent_id(caller_user_id)
+            # Debit the caller's user wallet
+            caller_wallet = await wallet_repo.get_by_user_id(caller_user_id)
             if not caller_wallet:
                 logger.warning(
-                    "No wallet for caller %s — skipping settlement", caller_user_id
+                    "No user wallet for caller %s — skipping settlement",
+                    caller_user_id,
                 )
                 return None
 
-            if caller_wallet.balance < price:
+            debited = await wallet_repo.atomic_debit(caller_wallet.id, price)
+            if not debited:
                 logger.warning(
-                    "Insufficient balance for caller %s (%d < %d)",
-                    caller_user_id, caller_wallet.balance, price,
+                    "Insufficient balance for caller %s (need %d)",
+                    caller_user_id, price,
                 )
                 return None
 
-            # Find agent owner's wallet
-            owner_wallet = await wallet_repo.get_by_agent_id(agent.user_id)
+            reference_id = _uuid.uuid4()
 
-            reference_id = uuid.uuid4()
-
-            # Debit caller
-            await wallet_repo.update_balance(
-                caller_wallet.id, caller_wallet.balance - price
-            )
             await wallet_repo.create_transaction(
                 Transaction(
                     wallet_id=caller_wallet.id,
@@ -466,20 +460,23 @@ class BrokerService:
                 )
             )
 
-            # Credit agent owner (if they have a wallet)
-            if owner_wallet:
-                await wallet_repo.update_balance(
-                    owner_wallet.id, owner_wallet.balance + price
+            # Credit the agent's own wallet (auto-create if needed)
+            agent_wallet = await wallet_repo.get_by_agent_id(agent.id)
+            if not agent_wallet:
+                agent_wallet = await wallet_repo.create(
+                    Wallet(agent_id=agent.id, wallet_type="agent", balance=0)
                 )
-                await wallet_repo.create_transaction(
-                    Transaction(
-                        wallet_id=owner_wallet.id,
-                        amount=price,
-                        tx_type="invocation_credit",
-                        reference_id=reference_id,
-                        description=f"Revenue from {agent.agent_id} invocation",
-                    )
+
+            await wallet_repo.atomic_credit(agent_wallet.id, price)
+            await wallet_repo.create_transaction(
+                Transaction(
+                    wallet_id=agent_wallet.id,
+                    amount=price,
+                    tx_type="invocation_credit",
+                    reference_id=reference_id,
+                    description=f"Revenue from {agent.agent_id} invocation",
                 )
+            )
 
             return price
         except Exception:

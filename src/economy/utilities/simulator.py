@@ -354,7 +354,7 @@ class Simulator:
                 user_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
             )
             agent = await agent_repo.create(agent)
-            wallet = Wallet(agent_id=agent.id, balance=0)
+            wallet = Wallet(agent_id=agent.id, wallet_type="agent", balance=0)
             wallet = await wallet_repo.create(wallet)
             await self._grant_initial_balance(
                 wallet_repo, wallet.id, config.initial_balance,
@@ -386,7 +386,7 @@ class Simulator:
                 user_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
             )
             agent = await agent_repo.create(agent)
-            wallet = Wallet(agent_id=agent.id, balance=0)
+            wallet = Wallet(agent_id=agent.id, wallet_type="agent", balance=0)
             wallet = await wallet_repo.create(wallet)
             await self._grant_initial_balance(
                 wallet_repo, wallet.id, config.initial_balance,

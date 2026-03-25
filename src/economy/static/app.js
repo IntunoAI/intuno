@@ -205,8 +205,14 @@ async function refreshWallets() {
 
         walletAgentMap = {};
         wallets.forEach(w => {
-            const agent = agentMap[w.agent_id];
-            walletAgentMap[w.id] = agent ? agent.name : w.agent_id.slice(0, 8);
+            if (w.wallet_type === 'user') {
+                walletAgentMap[w.id] = 'User Wallet';
+            } else if (w.agent_id) {
+                const agent = agentMap[w.agent_id];
+                walletAgentMap[w.id] = agent ? agent.name : w.agent_id.slice(0, 8);
+            } else {
+                walletAgentMap[w.id] = w.id.slice(0, 8);
+            }
         });
 
         const labels = [];
@@ -214,7 +220,7 @@ async function refreshWallets() {
         const colors = [];
 
         wallets.forEach(w => {
-            const name = walletAgentMap[w.id] || w.agent_id.slice(0, 8);
+            const name = walletAgentMap[w.id] || w.id.slice(0, 8);
             labels.push(name);
             balances.push(w.balance);
             colors.push(w.balance >= 0 ? '#00d68f' : '#ff4d6a');

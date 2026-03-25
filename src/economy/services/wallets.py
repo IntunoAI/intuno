@@ -2,13 +2,16 @@ import uuid
 
 from fastapi import Depends, HTTPException
 
-from src.economy.models.wallet import Transaction
+from src.economy.models.wallet import Transaction, Wallet
 from src.economy.repositories.wallets import WalletRepository
 from src.economy.schemas.wallet import (
+    AgentWalletSummary,
+    ConsolidateResponse,
     CreditDebitRequest,
     GrantRequest,
     TransactionResponse,
     TransferRequest,
+    UserWalletOverview,
     WalletResponse,
     WalletSummary,
 )
@@ -188,3 +191,94 @@ class WalletService:
             wallet_id, limit=limit, offset=offset,
         )
         return [TransactionResponse.model_validate(t) for t in transactions]
+
+    # ── User-wallet helpers ──────────────────────────────────────────
+
+    async def get_wallet_by_user(self, user_id: uuid.UUID) -> WalletResponse:
+        """Fetch the user-level wallet or raise 404."""
+        wallet = await self.wallet_repository.get_by_user_id(user_id)
+        if not wallet:
+            raise HTTPException(status_code=404, detail="User wallet not found")
+        return WalletResponse.model_validate(wallet)
+
+    async def get_user_wallet_overview(self, user_id: uuid.UUID) -> UserWalletOverview:
+        """Return the user wallet plus all their agent wallet summaries."""
+        wallet = await self.wallet_repository.get_by_user_id(user_id)
+        if not wallet:
+            raise HTTPException(status_code=404, detail="User wallet not found")
+
+        agent_wallets = await self.wallet_repository.get_agent_wallets_for_user(user_id)
+
+        agent_summaries = []
+        total_agent_balance = 0
+        for aw in agent_wallets:
+            agent_summaries.append(
+                AgentWalletSummary(
+                    wallet_id=aw.id,
+                    agent_id=aw.agent_id,
+                    agent_name=aw.agent.name if aw.agent else None,
+                    balance=aw.balance,
+                )
+            )
+            total_agent_balance += aw.balance
+
+        return UserWalletOverview(
+            wallet=WalletResponse.model_validate(wallet),
+            agent_wallets=agent_summaries,
+            total_agent_balance=total_agent_balance,
+        )
+
+    async def consolidate_agent_wallets(
+        self,
+        user_id: uuid.UUID,
+        agent_ids: list[uuid.UUID] | None = None,
+    ) -> ConsolidateResponse:
+        """Sweep balances from agent wallets into the user's main wallet."""
+        user_wallet = await self.wallet_repository.get_by_user_id(user_id)
+        if not user_wallet:
+            raise HTTPException(status_code=404, detail="User wallet not found")
+
+        agent_wallets = await self.wallet_repository.get_agent_wallets_for_user(
+            user_id, agent_ids=agent_ids,
+        )
+
+        reference_id = uuid.uuid4()
+        total_swept = 0
+        wallets_swept = 0
+
+        for aw in agent_wallets:
+            if aw.balance <= 0:
+                continue
+            amount = aw.balance
+
+            # Zero out the agent wallet
+            await self.wallet_repository.update_balance(aw.id, 0)
+            await self.wallet_repository.create_transaction(
+                Transaction(
+                    wallet_id=aw.id,
+                    amount=-amount,
+                    tx_type="consolidation_out",
+                    reference_id=reference_id,
+                    description="Sweep to user wallet",
+                )
+            )
+            total_swept += amount
+            wallets_swept += 1
+
+        if total_swept > 0:
+            await self.wallet_repository.atomic_credit(user_wallet.id, total_swept)
+            await self.wallet_repository.create_transaction(
+                Transaction(
+                    wallet_id=user_wallet.id,
+                    amount=total_swept,
+                    tx_type="consolidation_in",
+                    reference_id=reference_id,
+                    description=f"Consolidated from {wallets_swept} agent wallet(s)",
+                )
+            )
+
+        return ConsolidateResponse(
+            reference_id=reference_id,
+            total_swept=total_swept,
+            wallets_swept=wallets_swept,
+        )
