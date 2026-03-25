@@ -1,8 +1,12 @@
+import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+import redis.asyncio as aioredis
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.core.redis_client import close_redis, init_redis
 from src.core.settings import settings
@@ -20,11 +24,130 @@ from src.routes.registry import router as registry_router
 from src.routes.task import router as task_router
 from src.mcp_app import create_mcp_app
 
+# Workflow routers (from agent-os)
+from src.workflow.routes.workflows import router as workflow_router
+from src.workflow.routes.executions import router as execution_router
+from src.workflow.routes.webhooks import router as webhook_router
+
+# Economy routers (from agent-economy)
+from src.economy.routes.wallets import router as wallets_router
+from src.economy.routes.market import router as market_router
+from src.economy.routes.purchases import router as purchases_router
+from src.economy.routes.scenarios import router as scenarios_router
+from src.economy.routes.ws import router as ws_router
+
+# Workflow lifecycle helpers
+from src.workflow.utils.background import BackgroundRunner
+from src.workflow.utils.scheduler import WorkflowScheduler
+from src.workflow.utils.event_consumer import EventConsumer
+from src.workflow.exceptions import AppException as WorkflowAppException
+
+# Ensure all models are registered with SQLAlchemy metadata
+import src.models  # noqa: F401
+
+logger = logging.getLogger(__name__)
+
+
+async def _load_workflow_triggers(
+    app: FastAPI,
+    scheduler: WorkflowScheduler,
+    event_consumer: EventConsumer,
+) -> None:
+    """Scan workflow definitions and register their cron/event triggers."""
+    from src.database import async_session_factory
+    from src.workflow.repositories.workflows import WorkflowRepository
+    from src.workflow.models.dsl import WorkflowDef
+
+    async with async_session_factory() as session:
+        repo = WorkflowRepository(session)
+        workflows = await repo.list(limit=1000)
+
+    runner: BackgroundRunner = app.state.background_runner
+
+    async def cron_callback(workflow_id):
+        from src.workflow.repositories.executions import ExecutionRepository
+
+        async with async_session_factory() as session:
+            wf_repo = WorkflowRepository(session)
+            wf = await wf_repo.get_by_id(workflow_id)
+            if wf is None:
+                return
+            wf_def = WorkflowDef.model_validate(wf.definition)
+            exec_repo = ExecutionRepository(session)
+            execution = await exec_repo.create_execution(
+                workflow_id=wf.id, trigger_data={"source": "cron"},
+            )
+            await session.commit()
+
+        runner.submit(
+            execution_id=execution.id,
+            context_id=execution.context_id,
+            trigger_data={"source": "cron"},
+            workflow_def=wf_def,
+            workflow_id=workflow_id,
+        )
+
+    async def event_callback(workflow_id, event_data):
+        from src.workflow.repositories.executions import ExecutionRepository
+
+        async with async_session_factory() as session:
+            wf_repo = WorkflowRepository(session)
+            wf = await wf_repo.get_by_id(workflow_id)
+            if wf is None:
+                return
+            wf_def = WorkflowDef.model_validate(wf.definition)
+            exec_repo = ExecutionRepository(session)
+            execution = await exec_repo.create_execution(
+                workflow_id=wf.id, trigger_data=event_data,
+            )
+            await session.commit()
+
+        runner.submit(
+            execution_id=execution.id,
+            context_id=execution.context_id,
+            trigger_data=event_data,
+            workflow_def=wf_def,
+            workflow_id=workflow_id,
+        )
+
+    event_consumer.set_callback(event_callback)
+
+    for wf in workflows:
+        try:
+            wf_def = WorkflowDef.model_validate(wf.definition)
+        except Exception:
+            continue
+        for trigger in wf_def.triggers or []:
+            if trigger.type == "cron" and trigger.cron:
+                scheduler.register(wf.id, trigger.cron, cron_callback)
+            elif trigger.type == "event" and trigger.event:
+                event_consumer.register(trigger.event, wf.id)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Redis (shared by wisdom core, workflow, and economy)
     await init_redis()
+    app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+    # Workflow lifecycle
+    app.state.background_runner = BackgroundRunner(app.state.redis)
+    scheduler = WorkflowScheduler()
+    event_consumer = EventConsumer(app.state.redis)
+    app.state.scheduler = scheduler
+    app.state.event_consumer = event_consumer
+
+    await _load_workflow_triggers(app, scheduler, event_consumer)
+    await scheduler.start()
+    await event_consumer.start()
+
     yield
+
+    # Shutdown
+    await event_consumer.stop()
+    await scheduler.stop()
+    await app.state.background_runner.shutdown()
+    await app.state.redis.aclose()
     await close_redis()
 
 
@@ -44,7 +167,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers (tags defined on each router)
+# Workflow exception handler
+@app.exception_handler(WorkflowAppException)
+async def handle_workflow_exception(_request: Request, exc: WorkflowAppException):
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+# ── Existing wisdom routers ──────────────────────────────────────────
 app.include_router(health_router)
 app.include_router(analytics_router)
 app.include_router(auth_router)
@@ -58,8 +186,25 @@ app.include_router(message_router)
 app.include_router(invocation_log_router)
 app.include_router(task_router)
 
+# ── Workflow routers (from agent-os) ─────────────────────────────────
+app.include_router(workflow_router, prefix="/workflows", tags=["Workflows"])
+app.include_router(execution_router, tags=["Executions"])
+app.include_router(webhook_router, tags=["Webhooks"])
+
+# ── Economy routers (from agent-economy) ─────────────────────────────
+app.include_router(wallets_router, prefix="/wallets", tags=["Wallets"])
+app.include_router(market_router, prefix="/market", tags=["Market"])
+app.include_router(purchases_router, prefix="/credits", tags=["Credits"])
+app.include_router(scenarios_router, prefix="/scenarios", tags=["Scenarios"])
+app.include_router(ws_router, tags=["WebSocket"])
+
 # MCP server: streamable HTTP at /mcp
 app.mount("/mcp", create_mcp_app())
+
+# Simulator dashboard static files
+_static_dir = Path(__file__).parent / "economy" / "static"
+if _static_dir.is_dir():
+    app.mount("/simulator", StaticFiles(directory=str(_static_dir), html=True), name="simulator")
 
 
 @app.get("/.well-known/mcp/server-card.json")

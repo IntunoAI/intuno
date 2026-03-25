@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Economy Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+
+<header class="header">
+    <h1>Agent Economy Simulator</h1>
+    <div id="statusBadge" class="status-badge idle">
+        <span class="status-dot"></span>
+        <span id="statusText">Idle</span>
+    </div>
+</header>
+
+<main class="dashboard">
+
+    <section class="controls">
+        <div class="control-group">
+            <label>Scenario</label>
+            <select id="scenarioSelect"></select>
+        </div>
+        <div class="control-group">
+            <label>Ticks</label>
+            <input type="number" id="tickCount" value="100" min="10" max="1000" />
+        </div>
+        <div class="control-group">
+            <label>Speed (ms)</label>
+            <input type="number" id="tickInterval" value="500" min="50" max="5000" step="50" />
+        </div>
+        <div class="control-group">
+            <label>Service Agents</label>
+            <input type="number" id="serviceCount" value="5" min="1" max="20" />
+        </div>
+        <div class="control-group">
+            <label>Buyer Agents</label>
+            <input type="number" id="buyerCount" value="10" min="1" max="50" />
+        </div>
+        <button id="btnStart" class="btn-start" onclick="startSimulation()">Start</button>
+        <button id="btnStop" class="btn-stop" onclick="stopSimulation()" disabled>Stop</button>
+    </section>
+
+    <section class="stats-row">
+        <div class="stat-card">
+            <div class="stat-value" id="statTick">0 / 0</div>
+            <div class="stat-label">Tick</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="statTrades">0</div>
+            <div class="stat-label">Total Trades</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="statVolume">0</div>
+            <div class="stat-label">Total Volume</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="statAgents">0</div>
+            <div class="stat-label">Active Agents</div>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Price Evolution</h2>
+        <div class="chart-container">
+            <canvas id="priceChart"></canvas>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Wallet Balances</h2>
+        <div class="chart-container">
+            <canvas id="walletChart"></canvas>
+        </div>
+    </section>
+
+    <section class="card feed">
+        <h2>Live Activity Feed</h2>
+        <ul id="feedList" class="feed-list"></ul>
+    </section>
+
+    <section class="card">
+        <h2>Agent Leaderboard</h2>
+        <div style="overflow-y: auto; max-height: 240px;">
+            <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th>Agent</th>
+                        <th>Balance</th>
+                        <th>Granted</th>
+                        <th>Earned</th>
+                        <th>Spent</th>
+                        <th>Purchased</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboardBody"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card credits-panel" style="grid-column: 1 / -1;">
+        <h2>Credits Management</h2>
+        <div class="credits-layout">
+
+            <div class="credits-col">
+                <div class="credits-section">
+                    <label class="credits-label">Select Wallet</label>
+                    <select id="walletSelect" onchange="loadWalletSummary()">
+                        <option value="">-- pick a wallet --</option>
+                    </select>
+                </div>
+                <div id="walletSummaryCard" class="summary-card hidden">
+                    <div class="summary-title" id="summaryAgentName">—</div>
+                    <div class="summary-balance" id="summaryBalance">0</div>
+                    <div class="summary-label">credits</div>
+                    <div class="summary-breakdown">
+                        <div class="breakdown-row">
+                            <span class="breakdown-dot granted"></span>
+                            <span>Granted</span>
+                            <span class="breakdown-val" id="sumGranted">0</span>
+                        </div>
+                        <div class="breakdown-row">
+                            <span class="breakdown-dot purchased"></span>
+                            <span>Purchased</span>
+                            <span class="breakdown-val" id="sumPurchased">0</span>
+                        </div>
+                        <div class="breakdown-row">
+                            <span class="breakdown-dot earned"></span>
+                            <span>Earned</span>
+                            <span class="breakdown-val" id="sumEarned">0</span>
+                        </div>
+                        <div class="breakdown-row">
+                            <span class="breakdown-dot spent"></span>
+                            <span>Spent</span>
+                            <span class="breakdown-val" id="sumSpent">0</span>
+                        </div>
+                        <div class="breakdown-row" style="border-top:1px solid var(--border); padding-top:0.4rem; margin-top:0.2rem;">
+                            <span></span>
+                            <span>Transactions</span>
+                            <span class="breakdown-val" id="sumTxCount">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="credits-col">
+                <div class="credits-section">
+                    <label class="credits-label">Grant Credits</label>
+                    <div class="grant-form">
+                        <input type="number" id="grantAmount" placeholder="Amount" min="1" value="500" />
+                        <select id="grantType">
+                            <option value="grant_welcome">Welcome</option>
+                            <option value="grant_promotional" selected>Promotional</option>
+                            <option value="grant_reward">Reward</option>
+                        </select>
+                        <button class="btn-grant" onclick="grantCredits()">Grant</button>
+                    </div>
+                </div>
+                <div id="grantResult" class="action-result hidden"></div>
+            </div>
+
+            <div class="credits-col">
+                <div class="credits-section">
+                    <label class="credits-label">Buy Credits</label>
+                    <div id="packageCards" class="package-grid"></div>
+                </div>
+                <div id="purchaseResult" class="action-result hidden"></div>
+            </div>
+
+        </div>
+    </section>
+
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
