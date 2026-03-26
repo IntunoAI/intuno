@@ -4,14 +4,14 @@ from fastapi import Depends
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database import get_db
+from src.database import get_session
 from src.economy.models.credit_purchase import CreditPurchase
 
 
 class PurchaseRepository:
     """Persistence layer for credit purchase records."""
 
-    def __init__(self, db_session: AsyncSession = Depends(get_db)):
+    def __init__(self, db_session: AsyncSession = Depends(get_session)):
         self.db_session = db_session
 
     async def create(self, purchase: CreditPurchase) -> CreditPurchase:

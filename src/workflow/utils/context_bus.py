@@ -5,7 +5,6 @@ Steps read/write named entries.  On execution completion the hash is given
 a TTL so it doesn't linger forever.
 """
 
-from __future__ import annotations
 
 import json
 import uuid

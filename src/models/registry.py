@@ -67,6 +67,9 @@ class Agent(BaseModel):
     base_price: Column[Optional[float]] = Column(
         Float, nullable=True, default=None,
     )  # Credits per invocation (None = free)
+    pricing_enabled: Column[bool] = Column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )  # Opt-in to credit billing
 
     # Relationships
     user = relationship("User", back_populates="agents")

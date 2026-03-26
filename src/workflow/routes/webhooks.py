@@ -1,6 +1,5 @@
 """Webhook endpoints — external systems trigger workflow executions via HTTP."""
 
-from __future__ import annotations
 
 import uuid
 from typing import Any

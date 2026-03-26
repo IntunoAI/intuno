@@ -1,7 +1,6 @@
 """Core orchestration engine — walks the workflow DAG, executes steps,
 manages the context bus and process table."""
 
-from __future__ import annotations
 
 import asyncio
 import logging
@@ -75,6 +74,10 @@ class Orchestrator:
             )
             entry_ids[step.id] = entry.id
 
+        # Commit initial setup so process entries + running status persist
+        # even if execution fails and the outer session is rolled back.
+        await self._exec_repo._session.commit()
+
         max_duration = (
             workflow_def.max_duration_seconds
             if workflow_def.max_duration_seconds is not None
@@ -130,6 +133,10 @@ class Orchestrator:
         """Walk tiers sequentially; within each tier, run steps in parallel."""
         for tier in tiers:
             runnable = [sid for sid in tier if sid not in skipped]
+            # Mark DB entries for steps that are skipped in this tier
+            for sid in tier:
+                if sid in skipped:
+                    await self._exec_repo.mark_process_skipped(entry_ids[sid])
             if not runnable:
                 continue
 
@@ -329,6 +336,8 @@ class Orchestrator:
             trigger_data=child_trigger,
             parent_execution_id=parent_execution_id,
         )
+        # Commit child execution so it persists even if the child run fails.
+        await self._exec_repo._session.commit()
 
         parent_snapshot = await self._ctx.snapshot(parent_context_id)
         await self._ctx.write(child_exec.context_id, "__parent_context", parent_snapshot)

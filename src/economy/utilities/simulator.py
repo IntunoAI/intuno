@@ -67,6 +67,7 @@ class Simulator:
             cancelled = await self._cancel_stale_orders(session)
             if cancelled:
                 log.info("Cancelled %d stale open orders from previous runs", cancelled)
+            await self._ensure_system_user(session)
             await self._provision_agents(session, config, scenario_setup)
             await session.commit()
 
@@ -313,6 +314,23 @@ class Simulator:
                 "demand_ratio": len(bids) / max(len(asks), 1),
             }
         return context
+
+    @staticmethod
+    async def _ensure_system_user(session: AsyncSession) -> None:
+        """Upsert the simulator system user (UUID all-zeros) so FK constraints pass."""
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from src.models.auth import User
+
+        system_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
+        stmt = pg_insert(User).values(
+            id=system_id,
+            email="system@simulator.internal",
+            password_hash="!",
+            first_name="System",
+            last_name="Simulator",
+            is_active=False,
+        ).on_conflict_do_nothing(index_elements=["id"])
+        await session.execute(stmt)
 
     @staticmethod
     async def _cancel_stale_orders(session: AsyncSession) -> int:

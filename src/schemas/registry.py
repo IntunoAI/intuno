@@ -83,6 +83,10 @@ class AgentRegistration(BaseModel):
         default=None,
         description="Credits per invocation (None = free)",
     )
+    pricing_enabled: bool = Field(
+        default=False,
+        description="Enable credit billing for this agent",
+    )
 
     @field_validator("auth_type")
     @classmethod
@@ -105,6 +109,7 @@ class AgentUpdate(BaseModel):
     brand_id: Optional[UUID] = None
     pricing_strategy: Optional[str] = None
     base_price: Optional[float] = None
+    pricing_enabled: Optional[bool] = None
 
     @field_validator("auth_type")
     @classmethod
@@ -140,6 +145,7 @@ class AgentResponse(BaseModel):
     has_credentials: bool = Field(default=False)
     pricing_strategy: Optional[str] = Field(default=None)
     base_price: Optional[float] = Field(default=None)
+    pricing_enabled: bool = Field(default=False)
     created_at: datetime
     updated_at: datetime
     rating_avg: Optional[float] = Field(default=None)
@@ -168,6 +174,7 @@ class AgentListResponse(BaseModel):
     has_credentials: bool = Field(default=False)
     pricing_strategy: Optional[str] = Field(default=None)
     base_price: Optional[float] = Field(default=None)
+    pricing_enabled: bool = Field(default=False)
     created_at: datetime
     similarity_score: Optional[float] = Field(
         default=None,

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -54,3 +55,14 @@ class OrderBookResponse(BaseModel):
     capability: str
     bids: list[OrderResponse]
     asks: list[OrderResponse]
+
+
+class PricedAgentResponse(BaseModel):
+    """An agent available for invocation with a fixed price per call."""
+
+    agent_id: str
+    name: str
+    description: str
+    tags: List[str]
+    base_price: int
+    invocation_count: Optional[int] = None

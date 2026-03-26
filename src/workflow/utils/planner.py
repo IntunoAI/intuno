@@ -40,7 +40,7 @@ Each step must have:
 
 Optionally:
 - "parallel_with": id of another step to run concurrently
-- "when": conditional branches (list of {if/else, goto} objects)
+- "when": conditional branches (list of {{if/else, goto}} objects)
 
 Rules:
 - Do NOT produce steps with type "plan" (no recursive planning)
@@ -119,6 +119,11 @@ class Planner:
 
             data = response.data
 
+            if data is None:
+                raise StepExecutionError(
+                    "Planner agent returned no data — "
+                    "ensure 'system:task-planner' is registered and reachable"
+                )
             if isinstance(data, str):
                 steps = json.loads(data)
             elif isinstance(data, dict) and "steps" in data:
@@ -127,7 +132,7 @@ class Planner:
                 steps = data
             else:
                 raise StepExecutionError(
-                    f"Planner returned unexpected format: {type(data)}"
+                    f"Planner returned unexpected format: {type(data).__name__}"
                 )
 
             if not isinstance(steps, list):

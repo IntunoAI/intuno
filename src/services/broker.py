@@ -181,6 +181,23 @@ class BrokerService:
                         status_code=429,
                     )
 
+        # Billing: pre-flight balance check for priced agents
+        _pricing_enabled = getattr(agent, "pricing_enabled", False)
+        _agent_price_raw = getattr(agent, "base_price", None)
+        _agent_price = int(_agent_price_raw) if (_agent_price_raw and _agent_price_raw > 0) else 0
+
+        if _pricing_enabled and _agent_price > 0:
+            from src.economy.repositories.wallets import WalletRepository as _WR
+            _wr = _WR(self.registry_repository.session)
+            _caller_wallet = await _wr.get_by_user_id(caller_user_id)
+            if not _caller_wallet or _caller_wallet.balance < _agent_price:
+                return InvokeResponse(
+                    success=False,
+                    error="Insufficient credits",
+                    latency_ms=int((time.time() - start_time) * 1000),
+                    status_code=402,
+                )
+
         request_payload = invoke_request.input or {}
 
         # Brand agent: invoke via LLM internally
@@ -227,6 +244,11 @@ class BrokerService:
                     message_id=msg_id,
                 )
                 await self.invocation_log_repository.create_invocation_log(invocation_log)
+                credits_charged_brand = None
+                if success and _pricing_enabled and _agent_price > 0:
+                    credits_charged_brand = await self._settle_credits(
+                        caller_user_id, agent, _agent_price
+                    )
                 return InvokeResponse(
                     success=success,
                     data=response_data if success else None,
@@ -234,6 +256,7 @@ class BrokerService:
                     latency_ms=latency_ms,
                     status_code=200 if success else 500,
                     conversation_id=conv_id,
+                    credits_charged=credits_charged_brand,
                 )
 
         # Persist user message
@@ -375,10 +398,9 @@ class BrokerService:
 
         # Economy: settle credits after successful paid invocation
         credits_charged = None
-        agent_price = getattr(agent, "base_price", None)
-        if success and agent_price and agent_price > 0:
+        if success and _pricing_enabled and _agent_price > 0:
             credits_charged = await self._settle_credits(
-                caller_user_id, agent, int(agent_price)
+                caller_user_id, agent, _agent_price
             )
 
         # Log invocation

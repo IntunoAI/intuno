@@ -1,14 +1,50 @@
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.database import get_session
 from src.economy.schemas.market import (
     OrderBookResponse,
     OrderCreate,
     OrderResponse,
+    PricedAgentResponse,
     TradeResponse,
 )
 from src.economy.services.market import MarketService
 
 router = APIRouter()
+
+
+@router.get("/capabilities", response_model=list[PricedAgentResponse])
+async def list_priced_agents(
+    session: AsyncSession = Depends(get_session),
+) -> list[PricedAgentResponse]:
+    """List agents with pricing enabled — the API service catalog."""
+    from src.models.registry import Agent
+    from src.models.invocation_log import InvocationLog
+    from sqlalchemy import func
+
+    result = await session.execute(
+        select(
+            Agent,
+            func.count(InvocationLog.id).label("inv_count"),
+        )
+        .outerjoin(InvocationLog, InvocationLog.target_agent_id == Agent.id)
+        .where(Agent.pricing_enabled.is_(True), Agent.is_active.is_(True))
+        .group_by(Agent.id)
+    )
+    rows = result.all()
+    return [
+        PricedAgentResponse(
+            agent_id=agent.agent_id,
+            name=agent.name,
+            description=agent.description,
+            tags=agent.tags or [],
+            base_price=int(agent.base_price) if agent.base_price else 0,
+            invocation_count=inv_count,
+        )
+        for agent, inv_count in rows
+    ]
 
 
 @router.post("/orders", response_model=OrderResponse, status_code=201)

@@ -116,6 +116,7 @@ class RegistryService:
             qdrant_point_id=None,
             pricing_strategy=registration.pricing_strategy,
             base_price=registration.base_price,
+            pricing_enabled=registration.pricing_enabled,
         )
 
         created_agent = await self.registry_repository.create_agent(agent)
@@ -268,6 +269,8 @@ class RegistryService:
             agent.pricing_strategy = update.pricing_strategy
         if update.base_price is not None:
             agent.base_price = update.base_price
+        if update.pricing_enabled is not None:
+            agent.pricing_enabled = update.pricing_enabled
 
         # Regenerate embedding
         if enhance:

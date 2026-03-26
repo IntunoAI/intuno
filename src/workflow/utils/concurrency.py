@@ -9,7 +9,6 @@ process crashes without releasing.  Two scopes:
   definition (key ``conc:wf:{workflow_id}``).
 """
 
-from __future__ import annotations
 
 import asyncio
 import logging

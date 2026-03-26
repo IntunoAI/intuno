@@ -5,7 +5,6 @@ Retry with configurable exponential backoff.  When retries are exhausted and
 resolver and retry with it (up to ``max_alternatives`` times).
 """
 
-from __future__ import annotations
 
 import asyncio
 import logging

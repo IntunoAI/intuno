@@ -134,6 +134,7 @@ class AuthService:
                         description="Welcome bonus credits",
                     )
                 )
+            await session.commit()
         except Exception:
             logger.exception("Failed to provision wallet for user %s", user.id)
 

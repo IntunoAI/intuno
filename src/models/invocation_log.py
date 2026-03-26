@@ -18,8 +18,8 @@ class InvocationLog(BaseModel):
     caller_user_id: Column[UUID] = Column(
         PostgresUUID, ForeignKey("users.id"), nullable=False
     )
-    target_agent_id: Column[UUID] = Column(
-        PostgresUUID, ForeignKey("agents.id"), nullable=False
+    target_agent_id: Column[Optional[UUID]] = Column(
+        PostgresUUID, ForeignKey("agents.id", ondelete="SET NULL"), nullable=True
     )
     request_payload: Column[Dict[str, Any]] = Column(JSONB, nullable=False)
     response_payload: Column[Dict[str, Any]] = Column(JSONB, nullable=True)

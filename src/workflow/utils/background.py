@@ -67,6 +67,7 @@ class BackgroundRunner:
         workflow_id: uuid.UUID | None = None,
     ) -> None:
         from src.database import async_session_factory
+        from src.workflow.exceptions import StepExecutionError
         from src.workflow.repositories.executions import ExecutionRepository
         from src.workflow.utils.circuit_breaker import CircuitBreaker
         from src.workflow.utils.concurrency import ConcurrencyLimiter
@@ -106,6 +107,17 @@ class BackgroundRunner:
                     await repo.mark_execution_cancelled(execution_id)
                     await cancel_session.commit()
                 logger.info("Execution %s cancelled", execution_id)
-            except Exception:
+            except StepExecutionError as exc:
                 await session.rollback()
-                logger.exception("Background execution %s failed", execution_id)
+                async with async_session_factory() as fail_session:
+                    repo = ExecutionRepository(fail_session)
+                    await repo.mark_execution_failed(execution_id, str(exc))
+                    await fail_session.commit()
+                logger.warning("Execution %s failed: %s", execution_id, exc)
+            except Exception as exc:
+                await session.rollback()
+                async with async_session_factory() as fail_session:
+                    repo = ExecutionRepository(fail_session)
+                    await repo.mark_execution_failed(execution_id, str(exc))
+                    await fail_session.commit()
+                logger.exception("Execution %s failed unexpectedly", execution_id)
