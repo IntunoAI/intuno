@@ -1,6 +1,6 @@
 # Economy Module
 
-The economy module (`src/economy/`) implements an agent-to-agent marketplace with wallets, an order-book exchange, credit purchasing, and a tick-based simulator. It is self-contained and layered: routes → services → repositories → models.
+The economy module (`src/economy/`) implements an agent-to-agent marketplace with wallets, an order-book exchange, and credit purchasing. It is self-contained and layered: routes → services → repositories → models.
 
 ---
 
@@ -11,7 +11,6 @@ Agents in the Intuno network can charge other agents for their services. The eco
 - **Wallets & ledger** — every user and every agent has a wallet; all movements are recorded as immutable transactions.
 - **Marketplace** — agents post bids (buy) and asks (sell) for named capabilities; an order-matching engine settles trades.
 - **Credit purchasing** — users top up their wallet via a simulated checkout flow (Stripe-style pending → confirmed lifecycle).
-- **Simulation** — a tick-based simulator provisions synthetic buyer and service agents to demonstrate market dynamics.
 - **WebSocket stream** — real-time event feed for dashboards.
 
 ---
@@ -128,63 +127,7 @@ Settlement publishes a `SettlementComplete` event with `latency_ms` drawn from a
 
 ---
 
-## 5. Pricing Strategies
-
-Each service agent is assigned one of three pricing strategies (configured per scenario):
-
-| Strategy | Class | Behaviour |
-|---|---|---|
-| `fixed` | `FixedPricing` | Always returns `base_price` |
-| `dynamic` | `DynamicPricing` | Adjusts based on `demand_ratio = bids/asks`; formula: `base_price × (1 + sensitivity × (demand_ratio − 1))`, floor at 50% of base |
-| `auction` | `AuctionPricing` | Vickrey-style: returns true valuation + small noise, making truthful bidding dominant |
-
-The strategy is selected via `get_pricing_strategy(name)` and called each tick with the current market context.
-
----
-
-## 6. Simulation System
-
-### Scenario definitions (`utilities/scenarios.py`)
-
-Four built-in scenarios:
-
-| Name | Ticks | Focus |
-|---|---|---|
-| `price_discovery` | 100 | Price convergence with fixed-price sellers and budget buyers |
-| `supply_shock` | 150 | 2 of 5 service agents go offline at tick 50; remaining switch to dynamic pricing |
-| `arbitrage` | 120 | Two groups price the same capability differently; arbitrageur exploits the spread |
-| `reputation_premium` | 100 | High-success-rate agents charge more; buyers prefer quality up to a threshold |
-
-### Tick loop (`utilities/simulator.py`)
-
-```
-start(config, scenario_setup)
-  └─► _provision_agents()       ← create Agent DB rows + Wallet rows + AgentState objects
-        └─► _run_loop() [background task]
-              for tick in range(total_ticks):
-                  _execute_tick(session, tick)
-                    ├─► update agent wallet balances from DB
-                    ├─► agent.decide(market_context) for all agents → list of orders
-                    ├─► create Order rows in DB
-                    └─► _match_and_settle() per capability
-                            ├─► price-time priority matching
-                            ├─► SettlementEngine.settle_trade()
-                            └─► emit TradeCompleted event
-                  emit SimulationTick
-              emit SimulationCompleted
-```
-
-### Agent behaviours
-
-| Class | Role | Strategy |
-|---|---|---|
-| `ServiceAgent` | Places asks each tick | Pricing strategy determines ask price |
-| `BuyerAgent` | Places one bid per tick | Bid = avg_ask_price × random(0.8, 1.2) |
-| `ArbitrageAgent` | Places bid + ask when spread > 15% | Buy at `lowest_ask + 1`, sell at `avg_bid × 0.95` |
-
----
-
-## 7. Event Bus & WebSocket
+## 5. Event Bus & WebSocket
 
 `EventBus` (`utilities/event_bus.py`) is an in-memory pub/sub broker. Components call `event_bus.publish(event_type, data)` and the bus:
 
@@ -194,14 +137,14 @@ start(config, scenario_setup)
 Connect to `ws://<host>/ws/events` to receive the stream. Each message is:
 
 ```json
-{ "event": "SimulationTick", "data": { "tick": 3, "trades": 2, ... }, "timestamp": "2026-03-26T10:00:00Z" }
+{ "event": "TradeCompleted", "data": { "trade_id": "...", "price": 80 }, "timestamp": "2026-03-26T10:00:00Z" }
 ```
 
 See [API_ENDPOINTS.md](API_ENDPOINTS.md#websocket) for the full event type table.
 
 ---
 
-## 8. Running Tests
+## 6. Running Tests
 
 ```bash
 # 1. Start backend
@@ -211,15 +154,15 @@ cd wisdom && uvicorn src.main:app --reload --port 8000
 python -m tests.test_economy --base-url http://localhost:8000
 ```
 
-The test runner (`tests/test_economy.py`) covers all five phases: wallets, credits, scenarios + market, consolidation, and edge cases.
+The test runner (`tests/test_economy.py`) covers four phases: wallets, credits, consolidation, and edge cases.
 
 ---
 
-## 9. Known Gaps
+## 7. Known Gaps
 
 | Gap | Details |
 |---|---|
-| **agents route not mounted** | `src/economy/routes/agents.py` provides CRUD for economy agents but is not included in `main.py`. Economy agents can only be created by the simulator at runtime. |
+| **agents route not mounted** | `src/economy/routes/agents.py` provides CRUD for economy agents but is not included in `main.py`. |
 | **No orchestrator integration** | The orchestrator (`utilities/orchestrator.py`) does not yet deduct credits when invoking priced agents through multi-step task plans. |
-| **No usage-based billing** | Credits are deducted only at broker-invoke time. Scenario-internal trades do not affect the invoking user's wallet. |
+| **No usage-based billing** | Credits are deducted only at broker-invoke time. |
 | **Simulated payments only** | `PurchaseService` generates a fake `provider_reference`; no real Stripe or payment provider is wired up. |
