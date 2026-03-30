@@ -6,7 +6,6 @@ import redis.asyncio as aioredis
 from fastapi import Request
 from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
                                     create_async_engine)
-from sqlalchemy.pool import NullPool
 
 from src.core.settings import settings
 
@@ -15,8 +14,11 @@ if TYPE_CHECKING:
 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=False,  # Only echo in development
-    poolclass=NullPool,
+    echo=False,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_pre_ping=True,
+    pool_recycle=settings.DB_POOL_RECYCLE,
 )
 
 AsyncSessionLocal = async_sessionmaker(

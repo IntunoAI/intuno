@@ -71,6 +71,11 @@ class Agent(BaseModel):
         Boolean, nullable=False, default=False, server_default="false",
     )  # Opt-in to credit billing
 
+    # Streaming: agent supports SSE streaming responses
+    supports_streaming: Column[bool] = Column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )
+
     # Relationships
     user = relationship("User", back_populates="agents")
     brand = relationship(

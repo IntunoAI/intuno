@@ -17,13 +17,13 @@ from qdrant_client.models import (
 )
 
 from src.core.settings import settings
+from src.utilities.embedding import get_embedding_provider
 
 
 class QdrantService:
     """Service for managing Qdrant vector database operations."""
 
     AGENTS_COLLECTION = "agents"
-    VECTOR_SIZE = 1536  # OpenAI text-embedding-3-small dimension
     _agents_collection_initialized: bool = False  # shared across all instances
 
     def __init__(self):
@@ -32,6 +32,11 @@ class QdrantService:
             url=settings.QDRANT_URL,
             api_key=settings.QDRANT_API_KEY if settings.QDRANT_API_KEY else None,
         )
+
+    @property
+    def vector_size(self) -> int:
+        """Dynamic vector size from the active embedding provider."""
+        return get_embedding_provider().vector_size
 
     async def ensure_collection(self) -> None:
         """Ensure the agents collection exists and is properly configured."""
@@ -45,7 +50,7 @@ class QdrantService:
             await self.client.create_collection(
                 collection_name=self.AGENTS_COLLECTION,
                 vectors_config=VectorParams(
-                    size=self.VECTOR_SIZE,
+                    size=self.vector_size,
                     distance=Distance.COSINE,
                 ),
             )

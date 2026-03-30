@@ -14,7 +14,7 @@ import json
 import logging
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from openai import AsyncOpenAI
@@ -36,11 +36,16 @@ def _get_llm_client() -> AsyncOpenAI:
 
 @dataclass
 class StepSpec:
-    """Single step in a plan: id, description, and optional input for the step."""
+    """Single step in a plan: id, description, and optional input for the step.
+
+    depends_on: list of step IDs that must complete before this step runs.
+    Steps with no dependencies (or empty list) can run in parallel.
+    """
 
     id: uuid.UUID
     description: str
     input: Dict[str, Any]
+    depends_on: List[uuid.UUID] = field(default_factory=list)
 
 
 def plan(goal: str, input_data: Dict[str, Any]) -> List[StepSpec]:
@@ -98,11 +103,13 @@ async def plan_llm(goal: str, input_data: Dict[str, Any]) -> List[StepSpec]:
 
 Context (optional): {input_json}
 
-Output a single JSON array of steps. Each step: {{"description": "...", "input": {{}}}}
+Output a single JSON array of steps. Each step: {{"step_index": 0, "description": "...", "input": {{}}, "depends_on": []}}
+- step_index: zero-based index of this step.
 - description: one sentence, action-oriented (e.g. "Extract key figures from the document", "Translate the text to Spanish").
 - input: optional key-value dict for that step; can be empty {{}}.
+- depends_on: list of step_index values that must complete before this step runs. Use [] for steps that can start immediately. Steps with no dependencies can run in parallel.
 
-Return only the JSON array, e.g. [{{"description": "...", "input": {{}}}}, ...]. No other text."""
+Return only the JSON array. No other text."""
 
     try:
         client = _get_llm_client()
@@ -126,7 +133,11 @@ Return only the JSON array, e.g. [{{"description": "...", "input": {{}}}}, ...].
             logger.warning("Planner LLM did not return a non-empty array; falling back to single-step plan.")
             return plan(goal, input_data)
 
+        # First pass: create steps and record index → UUID mapping
         steps: List[StepSpec] = []
+        index_to_id: Dict[int, uuid.UUID] = {}
+        raw_deps: Dict[int, List[int]] = {}
+
         for i, item in enumerate(parsed):
             if not isinstance(item, dict):
                 continue
@@ -136,16 +147,29 @@ Return only the JSON array, e.g. [{{"description": "...", "input": {{}}}}, ...].
             step_input = item.get("input")
             if not isinstance(step_input, dict):
                 step_input = {}
-            # First step: ensure goal and user input_data are present for the agent
             if i == 0:
                 step_input = {"goal": goal_stripped, **(input_data or {}), **step_input}
+
+            step_id = uuid.uuid4()
+            step_index = item.get("step_index", i)
+            index_to_id[step_index] = step_id
+            raw_deps[step_index] = item.get("depends_on", []) or []
+
             steps.append(
                 StepSpec(
-                    id=uuid.uuid4(),
+                    id=step_id,
                     description=str(desc).strip(),
                     input=step_input,
                 )
             )
+
+        # Second pass: resolve depends_on indices → UUIDs
+        for step, (idx, _) in zip(steps, sorted(index_to_id.items())):
+            dep_indices = raw_deps.get(idx, [])
+            step.depends_on = [
+                index_to_id[d] for d in dep_indices
+                if isinstance(d, int) and d in index_to_id
+            ]
         if not steps:
             logger.warning("Planner LLM returned no valid steps; falling back to single-step plan.")
             return plan(goal, input_data)

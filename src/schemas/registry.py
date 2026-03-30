@@ -87,6 +87,10 @@ class AgentRegistration(BaseModel):
         default=False,
         description="Enable credit billing for this agent",
     )
+    supports_streaming: bool = Field(
+        default=False,
+        description="Whether the agent endpoint supports SSE streaming responses",
+    )
 
     @field_validator("auth_type")
     @classmethod
@@ -110,6 +114,7 @@ class AgentUpdate(BaseModel):
     pricing_strategy: Optional[str] = None
     base_price: Optional[float] = None
     pricing_enabled: Optional[bool] = None
+    supports_streaming: Optional[bool] = None
 
     @field_validator("auth_type")
     @classmethod
@@ -146,6 +151,7 @@ class AgentResponse(BaseModel):
     pricing_strategy: Optional[str] = Field(default=None)
     base_price: Optional[float] = Field(default=None)
     pricing_enabled: bool = Field(default=False)
+    supports_streaming: bool = Field(default=False)
     created_at: datetime
     updated_at: datetime
     rating_avg: Optional[float] = Field(default=None)
@@ -175,6 +181,7 @@ class AgentListResponse(BaseModel):
     pricing_strategy: Optional[str] = Field(default=None)
     base_price: Optional[float] = Field(default=None)
     pricing_enabled: bool = Field(default=False)
+    supports_streaming: bool = Field(default=False)
     created_at: datetime
     similarity_score: Optional[float] = Field(
         default=None,
