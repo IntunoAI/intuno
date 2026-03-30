@@ -15,8 +15,8 @@ jobs:
         with:
           version: "latest"
       - run: uv venv && uv pip install ruff
-      - run: .venv/bin/ruff check src/ tests/
-      - run: .venv/bin/ruff format --check src/ tests/
+      - run: .venv/bin/ruff check src/
+      - run: .venv/bin/ruff format --check src/
 
   test:
     if: false  # temporarily skipped — economy simulation tests removed
