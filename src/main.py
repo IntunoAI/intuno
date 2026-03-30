@@ -1,12 +1,10 @@
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from src.core.redis_client import close_redis, init_redis
 from src.core.settings import settings
@@ -33,7 +31,6 @@ from src.workflow.routes.webhooks import router as webhook_router
 from src.economy.routes.wallets import router as wallets_router
 from src.economy.routes.market import router as market_router
 from src.economy.routes.purchases import router as purchases_router
-from src.economy.routes.scenarios import router as scenarios_router
 from src.economy.routes.ws import router as ws_router
 
 # Workflow lifecycle helpers
@@ -201,16 +198,10 @@ app.include_router(webhook_router, tags=["Webhooks"])
 app.include_router(wallets_router, prefix="/wallets", tags=["Wallets"])
 app.include_router(market_router, prefix="/market", tags=["Market"])
 app.include_router(purchases_router, prefix="/credits", tags=["Credits"])
-app.include_router(scenarios_router, prefix="/scenarios", tags=["Scenarios"])
 app.include_router(ws_router, tags=["WebSocket"])
 
 # MCP server: streamable HTTP at /mcp
 app.mount("/mcp", create_mcp_app())
-
-# Simulator dashboard static files
-_static_dir = Path(__file__).parent / "economy" / "static"
-if _static_dir.is_dir():
-    app.mount("/simulator", StaticFiles(directory=str(_static_dir), html=True), name="simulator")
 
 
 @app.get("/.well-known/mcp/server-card.json")

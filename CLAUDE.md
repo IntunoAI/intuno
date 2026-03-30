@@ -40,16 +40,12 @@ economy/
 ├── models/                  # Wallet, Transaction, Order, Trade, CreditPurchase ORM models
 ├── schemas/                 # Pydantic request/response schemas
 ├── repositories/            # wallets, market, purchases, agents
-├── services/                # wallets, market, purchases, scenarios, agents
-├── routes/                  # /wallets, /market, /credits, /scenarios, WebSocket
+├── services/                # wallets, market, purchases, agents
+├── routes/                  # /wallets, /market, /credits, WebSocket
 │                            # Note: routes/agents.py exists but is NOT mounted in main.py
 └── utilities/
-    ├── pricing.py           # Fixed, Dynamic, Auction pricing strategies
     ├── settlement.py        # Double-entry trade settlement (95% success rate)
-    ├── simulator.py         # Tick-based simulation loop
-    ├── event_bus.py         # In-memory pub/sub → WebSocket broadcast
-    ├── scenarios.py         # Hardcoded scenario definitions
-    └── agent_behaviors/     # BuyerAgent, ServiceAgent, Arbitrageur
+    └── event_bus.py         # In-memory pub/sub → WebSocket broadcast
 ```
 
 ## Local Development

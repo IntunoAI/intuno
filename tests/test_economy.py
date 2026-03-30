@@ -1,14 +1,13 @@
 """
-End-to-end test script for the Economy module (wallets, credits, market, scenarios).
+End-to-end test script for the Economy module (wallets, credits, market).
 
 Spins up a fresh user via /auth/register, then exercises all mounted economy
-routes in five phases:
+routes in four phases:
 
   Phase A — Wallets       (basic CRUD + transfers)
   Phase B — Credits       (packages, purchase lifecycle)
-  Phase C — Scenarios + Market (integrated simulation flow)
-  Phase D — Consolidation (sweep agent wallets)
-  Phase E — Edge cases    (auth errors, 404s, overdraft, duplicate start)
+  Phase C — Consolidation (sweep agent wallets)
+  Phase D — Edge cases    (auth errors, 404s, overdraft)
 
 Prerequisites:
   1. Wisdom backend running on BASE_URL (default http://localhost:8000)
@@ -33,9 +32,6 @@ PASS = "\033[92mPASS\033[0m"
 FAIL = "\033[91mFAIL\033[0m"
 SKIP = "\033[93mSKIP\033[0m"
 
-# Maximum seconds to wait for a scenario tick to advance
-SCENARIO_POLL_TIMEOUT = 30
-
 
 class EconomyTestRunner:
     def __init__(self, base_url: str):
@@ -56,9 +52,6 @@ class EconomyTestRunner:
         # Purchase state
         self.purchase_id: Optional[str] = None
         self.cancel_purchase_id: Optional[str] = None
-
-        # Market state
-        self.scenario_capability: Optional[str] = None
 
     # ── Helpers ────────────────────────────────────────────────────────
 
@@ -375,143 +368,7 @@ class EconomyTestRunner:
             f"status={r.status_code}",
         )
 
-    # ── Phase C: Scenarios + Market ────────────────────────────────────
-
-    async def test_list_scenarios(self):
-        r = await self.client.get("/scenarios")
-        ok = r.status_code == 200 and isinstance(r.json(), list) and len(r.json()) >= 4
-        self._record(
-            "GET /scenarios/ (≥4 available)",
-            ok,
-            f"status={r.status_code} count={len(r.json()) if r.status_code == 200 else 'N/A'}",
-        )
-
-    async def test_scenario_status_idle(self):
-        r = await self.client.get("/scenarios/status")
-        ok = r.status_code == 200
-        status_val = r.json().get("status") if ok else None
-        self._record(
-            "GET /scenarios/status (initially idle/stopped)",
-            ok,
-            f"status={r.status_code} scenario_status={status_val}",
-        )
-
-    async def test_start_scenario(self) -> bool:
-        # Stop any scenario that may be running from a previous test run
-        await self.client.post("/scenarios/stop")
-        config = {
-            "scenario_name": "price_discovery",
-            "tick_count": 3,
-            "tick_interval_ms": 200,
-            "service_agent_count": 1,
-            "buyer_agent_count": 1,
-            "initial_balance": 500,
-        }
-        r = await self.client.post("/scenarios/start", json=config)
-        ok = r.status_code == 200
-        data = r.json() if ok else {}
-        started = ok and data.get("status") in ("running", "idle")
-        self._record(
-            "POST /scenarios/start (price_discovery)",
-            ok,
-            f"status={r.status_code} scenario_status={data.get('status')}",
-        )
-        return ok
-
-    async def test_scenario_status_running(self):
-        r = await self.client.get("/scenarios/status")
-        ok = r.status_code == 200
-        data = r.json() if ok else {}
-        self._record(
-            "GET /scenarios/status → running",
-            ok and data.get("status") == "running",
-            f"status={r.status_code} scenario_status={data.get('status')}",
-        )
-
-    async def test_poll_scenario_tick(self):
-        """Poll until current_tick >= 1 or timeout."""
-        elapsed = 0
-        interval = 1
-        tick_reached = False
-        while elapsed < SCENARIO_POLL_TIMEOUT:
-            await asyncio.sleep(interval)
-            elapsed += interval
-            r = await self.client.get("/scenarios/status")
-            if r.status_code != 200:
-                continue
-            data = r.json()
-            if data.get("current_tick", 0) >= 1:
-                tick_reached = True
-                break
-            if data.get("status") in ("completed", "stopped", "error"):
-                break
-        self._record(
-            f"scenarios/status poll → current_tick≥1 (timeout={SCENARIO_POLL_TIMEOUT}s)",
-            tick_reached,
-            f"elapsed={elapsed}s tick_reached={tick_reached}",
-        )
-        return tick_reached
-
-    async def test_market_capabilities(self):
-        r = await self.client.get("/market/capabilities")
-        ok = r.status_code == 200
-        caps = r.json() if ok else []
-        # Pick first capability for order book test
-        if caps:
-            self.scenario_capability = caps[0].get("agent_id") or caps[0].get("tags", [None])[0]
-        self._record(
-            "GET /market/capabilities (≥1 after scenario start)",
-            ok,
-            f"status={r.status_code} count={len(caps)}",
-        )
-
-    async def test_order_book(self):
-        if not self.scenario_capability:
-            # Try a generic capability name from the scenario setup
-            self.scenario_capability = "translation"
-        r = await self.client.get(f"/market/book/{self.scenario_capability}")
-        ok = r.status_code == 200
-        data = r.json() if ok else {}
-        self._record(
-            f"GET /market/book/{{capability}} ({self.scenario_capability})",
-            ok,
-            f"status={r.status_code} bids={len(data.get('bids', []))} asks={len(data.get('asks', []))}",
-        )
-
-    async def test_list_trades(self):
-        r = await self.client.get("/market/trades", params={"limit": 50})
-        ok = r.status_code == 200
-        trades = r.json() if ok else []
-        # Trades may be empty if the scenario hasn't matched yet — warn but don't fail hard
-        self._record(
-            "GET /market/trades (≥0 after scenario run)",
-            ok,
-            f"status={r.status_code} count={len(trades)}",
-        )
-
-    async def test_stop_scenario(self):
-        r = await self.client.post("/scenarios/stop")
-        # 200 = stopped now; 400 = already completed (short tick count ran to completion)
-        ok = r.status_code in (200, 400)
-        data = r.json() if r.status_code == 200 else {}
-        self._record(
-            "POST /scenarios/stop",
-            ok,
-            f"status={r.status_code} scenario_status={data.get('status')}",
-        )
-
-    async def test_scenario_status_stopped(self):
-        r = await self.client.get("/scenarios/status")
-        ok = r.status_code == 200
-        data = r.json() if ok else {}
-        stopped = data.get("status") not in ("running",)
-        self._record(
-            "GET /scenarios/status → not running after stop",
-            ok and stopped,
-            f"status={r.status_code} scenario_status={data.get('status')}",
-        )
-
-    # ── Phase D: Consolidation ─────────────────────────────────────────
+    # ── Phase C: Consolidation ─────────────────────────────────────────
 
     async def test_consolidate(self):
         r = await self.client.post(
@@ -527,7 +384,7 @@ class EconomyTestRunner:
             f"status={r.status_code} total_swept={data.get('total_swept')} wallets_swept={data.get('wallets_swept')}",
         )
 
-    # ── Phase E: Edge cases / auth ─────────────────────────────────────
+    # ── Phase D: Edge cases / auth ─────────────────────────────────────
 
     async def test_no_auth_wallet(self):
         r = await self.client.get("/wallets/me")
@@ -565,38 +422,6 @@ class EconomyTestRunner:
             f"status={r.status_code}",
         )
 
-    async def test_duplicate_scenario_start(self):
-        """Start a scenario, then try to start another — expect 4xx."""
-        config = {
-            "scenario_name": "price_discovery",
-            "tick_count": 100,
-            "tick_interval_ms": 500,
-            "service_agent_count": 1,
-            "buyer_agent_count": 1,
-            "initial_balance": 200,
-        }
-        # Make sure nothing is running first
-        await self.client.post("/scenarios/stop")
-        await asyncio.sleep(0.2)
-
-        r1 = await self.client.post("/scenarios/start", json=config)
-        if r1.status_code != 200:
-            self._skip(
-                "POST /scenarios/start (duplicate) → 409/4xx",
-                f"first start failed ({r1.status_code})",
-            )
-            return
-
-        r2 = await self.client.post("/scenarios/start", json=config)
-        ok = r2.status_code >= 400
-        self._record(
-            "POST /scenarios/start while running → 409/4xx",
-            ok,
-            f"status={r2.status_code}",
-        )
-        # Clean up
-        await self.client.post("/scenarios/stop")
-
     # ── Runner ─────────────────────────────────────────────────────────
 
     async def run_all(self):
@@ -626,38 +451,13 @@ class EconomyTestRunner:
         await self.test_cancel_purchase(packages)
         await self.test_confirm_cancelled_purchase()
 
-        print("\n── Phase C: Scenarios + Market ──")
-        await self.test_list_scenarios()
-        await self.test_scenario_status_idle()
-        started = await self.test_start_scenario()
-        if started:
-            await self.test_scenario_status_running()
-            await self.test_poll_scenario_tick()
-            await self.test_market_capabilities()
-            await self.test_order_book()
-            await self.test_list_trades()
-            await self.test_stop_scenario()
-            await self.test_scenario_status_stopped()
-        else:
-            for name in [
-                "GET /scenarios/status → running",
-                "scenarios/status poll → current_tick≥1",
-                "GET /market/capabilities",
-                "GET /market/book/{capability}",
-                "GET /market/trades",
-                "POST /scenarios/stop",
-                "GET /scenarios/status → not running after stop",
-            ]:
-                self._skip(name, "scenario did not start")
-
-        print("\n── Phase D: Consolidation ──")
+        print("\n── Phase C: Consolidation ──")
         await self.test_consolidate()
 
-        print("\n── Phase E: Edge Cases / Auth ──")
+        print("\n── Phase D: Edge Cases / Auth ──")
         await self.test_no_auth_wallet()
         await self.test_wallet_not_found()
         await self.test_overdraft()
-        await self.test_duplicate_scenario_start()
 
         await self.client.aclose()
         self._print_summary()
