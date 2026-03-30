@@ -22,6 +22,20 @@ class Settings(BaseSettings):
     # API Key Configuration
     API_KEY_LENGTH: int = 32
 
+    # ── Database connection pool ────────────────────────────────────────
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_RECYCLE: int = 3600  # seconds
+
+    # ── HTTP client pool (broker → agent invocations) ─────────────────
+    BROKER_HTTP_POOL_SIZE: int = 100  # max keepalive connections
+    BROKER_HTTP_MAX_CONNECTIONS: int = 200
+
+    # ── Embedding provider ────────────────────────────────────────────
+    EMBEDDING_PROVIDER: str = "openai"  # "openai" | "ollama"
+    EMBEDDING_URL: str = "http://localhost:11434"  # Ollama base URL
+    EMBEDDING_CACHE_TTL: int = 3600  # seconds; 0 = no cache
+
     # Redis Configuration (for caching; empty = no cache)
     REDIS_URL: str = "redis://localhost:6379/0"
 

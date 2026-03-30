@@ -73,3 +73,29 @@ async def cache_set(key: str, value: Any, ttl_seconds: int) -> bool:
     except Exception as e:
         logger.warning("Cache set failed for %s: %s", key, e)
         return False
+
+
+# ── Quota counters ────────────────────────────────────────────────────
+
+
+async def quota_increment(key: str, ttl_seconds: int) -> Optional[int]:
+    """Atomically increment a quota counter. Returns new count, or None if Redis unavailable.
+
+    Sets TTL on first increment so the counter auto-expires at the end of the window.
+    """
+    client = await get_redis()
+    if not client:
+        return None
+    try:
+        pipe = client.pipeline(transaction=True)
+        pipe.incr(key)
+        pipe.ttl(key)
+        results = await pipe.execute()
+        count, current_ttl = results[0], results[1]
+        # Set expiry only on first increment (ttl == -1 means no expiry set)
+        if current_ttl == -1:
+            await client.expire(key, ttl_seconds)
+        return count
+    except Exception as e:
+        logger.warning("Quota increment failed for %s: %s", key, e)
+        return None

@@ -1,15 +1,15 @@
 """Broker domain service: agent invocation with logging, quotas, and timeouts."""
 
 import asyncio
+import json
+import random
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
 import httpx
 from fastapi import Depends
-
-import json
 
 from src.core.url_validation import validate_invoke_endpoint
 from src.models.conversation import Conversation
@@ -58,6 +58,16 @@ class BrokerService:
         self.conversation_repository = conversation_repository
         self.message_repository = message_repository
         self.brand_repository = brand_repository
+        self._http_client: Optional[httpx.AsyncClient] = None
+        self._request_id: Optional[str] = None
+
+    def set_http_client(self, client: httpx.AsyncClient) -> None:
+        """Inject the shared HTTP client (set by the route layer)."""
+        self._http_client = client
+
+    def set_request_id(self, request_id: str) -> None:
+        """Set the request ID for distributed tracing."""
+        self._request_id = request_id
 
     async def invoke_agent(
         self,
@@ -153,14 +163,25 @@ class BrokerService:
                     status_code=403,
                 )
 
-        # Quota check
+        # Quota check (Redis counters with DB fallback)
         if config:
+            from src.core.redis_client import quota_increment
+
             now = datetime.now(timezone.utc)
             if config.monthly_invocation_quota is not None:
-                first_day = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                count = await self.invocation_log_repository.count_invocations_for_integration(
-                    integration_id, first_day, now
+                month_key = f"quota:{integration_id}:monthly:{now.strftime('%Y-%m')}"
+                # Remaining seconds until end of month
+                next_month = (now.replace(day=28) + timedelta(days=4)).replace(
+                    day=1, hour=0, minute=0, second=0, microsecond=0
                 )
+                month_ttl = max(int((next_month - now).total_seconds()), 1)
+                count = await quota_increment(month_key, month_ttl)
+                if count is None:
+                    # Redis unavailable — fall back to DB scan
+                    first_day = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                    count = await self.invocation_log_repository.count_invocations_for_integration(
+                        integration_id, first_day, now
+                    )
                 if count >= config.monthly_invocation_quota:
                     return InvokeResponse(
                         success=False,
@@ -169,10 +190,15 @@ class BrokerService:
                         status_code=429,
                     )
             if config.daily_invocation_quota is not None:
-                start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                count = await self.invocation_log_repository.count_invocations_for_integration(
-                    integration_id, start_of_day, now
-                )
+                day_key = f"quota:{integration_id}:daily:{now.strftime('%Y-%m-%d')}"
+                day_ttl = max(86400 - (now.hour * 3600 + now.minute * 60 + now.second), 1)
+                count = await quota_increment(day_key, day_ttl)
+                if count is None:
+                    # Redis unavailable — fall back to DB scan
+                    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    count = await self.invocation_log_repository.count_invocations_for_integration(
+                        integration_id, start_of_day, now
+                    )
                 if count >= config.daily_invocation_quota:
                     return InvokeResponse(
                         success=False,
@@ -325,61 +351,76 @@ class BrokerService:
         scheme = (cred.auth_scheme if cred and cred.auth_scheme is not None else None) or defaults.get("scheme", "")
         header_value = f"{scheme} {cred_value}".strip() if (cred_value and scheme) else (cred_value or "")
 
-        for attempt in range(max_retries + 1):
-            try:
-                async with httpx.AsyncClient(timeout=timeout_sec) as client:
+        # Use shared HTTP client when available; fall back to one-shot client
+        client = self._http_client
+        owns_client = client is None
+        if owns_client:
+            client = httpx.AsyncClient(timeout=timeout_sec)
+
+        try:
+            for attempt in range(max_retries + 1):
+                try:
                     headers = {
                         "Content-Type": "application/json",
                         "User-Agent": "Intuno-Broker/1.0",
                     }
+                    if self._request_id:
+                        headers["X-Request-ID"] = self._request_id
                     if header_value:
                         headers[header_name] = header_value
                     response = await client.post(
                         agent.invoke_endpoint,
                         json=request_payload,
                         headers=headers,
+                        timeout=timeout_sec,
                     )
-                response_status_code = response.status_code
+                    response_status_code = response.status_code
 
-                if response.status_code == 200:
-                    try:
-                        response_data = response.json()
-                        success = True
-                        error = None
-                    except Exception:
-                        response_data = {"raw_response": response.text}
+                    if response.status_code == 200:
+                        try:
+                            response_data = response.json()
+                            success = True
+                            error = None
+                        except Exception:
+                            response_data = {"raw_response": response.text}
+                            success = False
+                            error = "Invalid JSON response from agent"
+                    else:
+                        response_data = {"error": response.text}
                         success = False
-                        error = "Invalid JSON response from agent"
-                else:
-                    response_data = {"error": response.text}
+                        error = f"Agent returned status {response.status_code}"
+
+                    if attempt < max_retries and (
+                        response_status_code >= 500 or response_status_code == 408
+                    ):
+                        jitter = retry_backoff * (attempt + 1) * (0.5 + random.random())
+                        await asyncio.sleep(jitter)
+                        continue
+                    break
+
+                except httpx.TimeoutException:
+                    response_status_code = 408
+                    response_data = None
                     success = False
-                    error = f"Agent returned status {response.status_code}"
-
-                if attempt < max_retries and (
-                    response_status_code >= 500 or response_status_code == 408
-                ):
-                    await asyncio.sleep(retry_backoff * (attempt + 1))
-                    continue
-                break
-
-            except httpx.TimeoutException:
-                response_status_code = 408
-                response_data = None
-                success = False
-                error = "Request timeout"
-                if attempt < max_retries:
-                    await asyncio.sleep(retry_backoff * (attempt + 1))
-                    continue
-                break
-            except Exception as e:
-                response_status_code = 500
-                response_data = None
-                success = False
-                error = f"Request failed: {str(e)}"
-                if attempt < max_retries:
-                    await asyncio.sleep(retry_backoff * (attempt + 1))
-                    continue
-                break
+                    error = "Request timeout"
+                    if attempt < max_retries:
+                        jitter = retry_backoff * (attempt + 1) * (0.5 + random.random())
+                        await asyncio.sleep(jitter)
+                        continue
+                    break
+                except Exception as e:
+                    response_status_code = 500
+                    response_data = None
+                    success = False
+                    error = f"Request failed: {str(e)}"
+                    if attempt < max_retries:
+                        jitter = retry_backoff * (attempt + 1) * (0.5 + random.random())
+                        await asyncio.sleep(jitter)
+                        continue
+                    break
+        finally:
+            if owns_client:
+                await client.aclose()
 
         latency_ms = int((time.time() - start_time) * 1000)
         if response_data is None:
@@ -427,6 +468,109 @@ class BrokerService:
             conversation_id=conv_id,
             credits_charged=credits_charged,
         )
+
+    async def invoke_agent_stream(
+        self,
+        invoke_request: InvokeRequest,
+        caller_user_id: UUID,
+        integration_id: Optional[UUID] = None,
+        conversation_id: Optional[UUID] = None,
+        message_id: Optional[UUID] = None,
+    ):
+        """Invoke an agent with SSE streaming support.
+
+        If the target agent supports streaming, proxies the SSE stream as an
+        async generator of dicts. Otherwise, falls back to a normal invocation
+        and returns an InvokeResponse.
+        """
+        # Resolve agent to check streaming support
+        agent = await self.registry_repository.get_agent_by_agent_id(invoke_request.agent_id)
+        supports_streaming = getattr(agent, "supports_streaming", False) if agent else False
+
+        if not supports_streaming:
+            # Fall back to normal invocation
+            return await self.invoke_agent(
+                invoke_request, caller_user_id, integration_id,
+                conversation_id, message_id,
+            )
+
+        # Stream from the agent's endpoint
+        return self._stream_from_agent(
+            agent, invoke_request, caller_user_id, integration_id,
+            conversation_id, message_id,
+        )
+
+    async def _stream_from_agent(
+        self,
+        agent,
+        invoke_request: InvokeRequest,
+        caller_user_id: UUID,
+        integration_id: Optional[UUID],
+        conversation_id: Optional[UUID],
+        message_id: Optional[UUID],
+    ):
+        """Proxy SSE stream from a streaming-capable agent."""
+        import time as _time
+
+        start_time = _time.time()
+        request_payload = invoke_request.input or {}
+
+        # Resolve auth (same logic as invoke_agent)
+        auth_type = (agent.auth_type or "public").lower()
+        header_name, header_value = "", ""
+        if auth_type in ("api_key", "bearer_token"):
+            cred = await self.registry_repository.get_agent_credential(agent.id, auth_type)
+            if cred:
+                from src.core.credential_crypto import decrypt_credential
+                try:
+                    cred_value = decrypt_credential(cred.encrypted_value)
+                except ValueError:
+                    cred_value = None
+                if cred_value:
+                    defaults = {
+                        "api_key": {"header": "X-API-Key", "scheme": ""},
+                        "bearer_token": {"header": "Authorization", "scheme": "Bearer"},
+                    }
+                    d = defaults.get(auth_type, {})
+                    header_name = (cred.auth_header or d.get("header", ""))
+                    scheme = (cred.auth_scheme if cred.auth_scheme is not None else None) or d.get("scheme", "")
+                    header_value = f"{scheme} {cred_value}".strip() if scheme else cred_value
+
+        config = await self.broker_config_repository.get_effective_config(integration_id)
+        timeout_sec = float(config.request_timeout_seconds) if config else DEFAULT_REQUEST_TIMEOUT_SECONDS
+
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "Intuno-Broker/1.0",
+            "Accept": "text/event-stream",
+        }
+        if header_value:
+            headers[header_name] = header_value
+
+        client = self._http_client or httpx.AsyncClient(timeout=timeout_sec)
+        owns_client = self._http_client is None
+
+        try:
+            async with client.stream(
+                "POST",
+                agent.invoke_endpoint,
+                json=request_payload,
+                headers=headers,
+                timeout=timeout_sec,
+            ) as response:
+                async for line in response.aiter_lines():
+                    if line.startswith("data:"):
+                        data = line[5:].strip()
+                        if data:
+                            try:
+                                yield json.loads(data)
+                            except json.JSONDecodeError:
+                                yield {"text": data}
+                    elif line.strip() == "":
+                        continue
+        finally:
+            if owns_client:
+                await client.aclose()
 
     async def _settle_credits(
         self,

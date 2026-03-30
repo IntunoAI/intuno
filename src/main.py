@@ -1,13 +1,22 @@
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from src.core.logging_config import setup_logging
+from src.core.middleware import RequestTracingMiddleware
 from src.core.redis_client import close_redis, init_redis
 from src.core.settings import settings
+
+# Initialize structured logging early
+setup_logging(
+    log_level=settings.LOG_LEVEL,
+    json_format=settings.ENVIRONMENT != "development",
+)
 from src.routes.analytics import router as analytics_router
 from src.routes.auth import router as auth_router
 from src.routes.brand import router as brand_router
@@ -129,6 +138,15 @@ async def lifespan(app: FastAPI):
     elif settings.JWT_SECRET_KEY == "dev-secret-change-in-prod" and settings.ENVIRONMENT != "development":
         logger.warning("JWT_SECRET_KEY is using the default dev value in a non-development environment. Change it immediately.")
 
+    # Shared HTTP client for broker → agent invocations (connection pooling)
+    app.state.http_client = httpx.AsyncClient(
+        limits=httpx.Limits(
+            max_keepalive_connections=settings.BROKER_HTTP_POOL_SIZE,
+            max_connections=settings.BROKER_HTTP_MAX_CONNECTIONS,
+        ),
+        follow_redirects=False,
+    )
+
     # Redis (shared by core, workflow, and economy)
     await init_redis()
     app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
@@ -147,6 +165,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    await app.state.http_client.aclose()
     await event_consumer.stop()
     await scheduler.stop()
     await app.state.background_runner.shutdown()
@@ -169,6 +188,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Request tracing middleware (X-Request-ID + timing)
+app.add_middleware(RequestTracingMiddleware)
 
 # Workflow exception handler
 @app.exception_handler(WorkflowAppException)
