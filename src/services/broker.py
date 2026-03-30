@@ -88,16 +88,29 @@ class BrokerService:
         """
         start_time = time.time()
 
-        # Load effective broker config
-        config = await self.broker_config_repository.get_effective_config(integration_id)
-
         # Resolve conversation_id and message_id from request if not passed
         conv_id = conversation_id or invoke_request.conversation_id
         msg_id = message_id or invoke_request.message_id
 
-        # Validate conversation and message ownership
+        # Batch independent lookups: config + agent + conversation (if provided)
+        config_coro = self.broker_config_repository.get_effective_config(integration_id)
+        agent_coro = self.registry_repository.get_agent_by_agent_id(
+            invoke_request.agent_id
+        )
+
         if conv_id is not None:
-            conversation = await self.conversation_repository.get_by_id(conv_id)
+            conv_coro = self.conversation_repository.get_by_id(conv_id)
+            config, agent, conversation = await asyncio.gather(
+                config_coro,
+                agent_coro,
+                conv_coro,
+            )
+        else:
+            config, agent = await asyncio.gather(config_coro, agent_coro)
+            conversation = None
+
+        # Validate conversation ownership
+        if conv_id is not None:
             if not conversation or conversation.user_id != caller_user_id:
                 return InvokeResponse(
                     success=False,
@@ -105,7 +118,10 @@ class BrokerService:
                     latency_ms=int((time.time() - start_time) * 1000),
                     status_code=404,
                 )
-            if integration_id is not None and conversation.integration_id != integration_id:
+            if (
+                integration_id is not None
+                and conversation.integration_id != integration_id
+            ):
                 return InvokeResponse(
                     success=False,
                     error="Conversation does not belong to this integration",
@@ -143,8 +159,7 @@ class BrokerService:
                     status_code=404,
                 )
 
-        # Get the agent
-        agent = await self.registry_repository.get_agent_by_agent_id(invoke_request.agent_id)
+        # Agent already fetched above via asyncio.gather
         if not agent or not agent.is_active:
             return InvokeResponse(
                 success=False,
@@ -178,7 +193,9 @@ class BrokerService:
                 count = await quota_increment(month_key, month_ttl)
                 if count is None:
                     # Redis unavailable — fall back to DB scan
-                    first_day = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                    first_day = now.replace(
+                        day=1, hour=0, minute=0, second=0, microsecond=0
+                    )
                     count = await self.invocation_log_repository.count_invocations_for_integration(
                         integration_id, first_day, now
                     )
@@ -191,11 +208,15 @@ class BrokerService:
                     )
             if config.daily_invocation_quota is not None:
                 day_key = f"quota:{integration_id}:daily:{now.strftime('%Y-%m-%d')}"
-                day_ttl = max(86400 - (now.hour * 3600 + now.minute * 60 + now.second), 1)
+                day_ttl = max(
+                    86400 - (now.hour * 3600 + now.minute * 60 + now.second), 1
+                )
                 count = await quota_increment(day_key, day_ttl)
                 if count is None:
                     # Redis unavailable — fall back to DB scan
-                    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    start_of_day = now.replace(
+                        hour=0, minute=0, second=0, microsecond=0
+                    )
                     count = await self.invocation_log_repository.count_invocations_for_integration(
                         integration_id, start_of_day, now
                     )
@@ -210,10 +231,13 @@ class BrokerService:
         # Billing: pre-flight balance check for priced agents
         _pricing_enabled = getattr(agent, "pricing_enabled", False)
         _agent_price_raw = getattr(agent, "base_price", None)
-        _agent_price = int(_agent_price_raw) if (_agent_price_raw and _agent_price_raw > 0) else 0
+        _agent_price = (
+            int(_agent_price_raw) if (_agent_price_raw and _agent_price_raw > 0) else 0
+        )
 
         if _pricing_enabled and _agent_price > 0:
             from src.economy.repositories.wallets import WalletRepository as _WR
+
             _wr = _WR(self.registry_repository.session)
             _caller_wallet = await _wr.get_by_user_id(caller_user_id)
             if not _caller_wallet or _caller_wallet.balance < _agent_price:
@@ -241,7 +265,9 @@ class BrokerService:
                     )
                     msg_id = user_message.id
                 try:
-                    response_data = await generate_brand_agent_response(brand, request_payload)
+                    response_data = await generate_brand_agent_response(
+                        brand, request_payload
+                    )
                 except Exception as e:
                     response_data = {"error": str(e)}
                     success = False
@@ -269,7 +295,9 @@ class BrokerService:
                     conversation_id=conv_id,
                     message_id=msg_id,
                 )
-                await self.invocation_log_repository.create_invocation_log(invocation_log)
+                await self.invocation_log_repository.create_invocation_log(
+                    invocation_log
+                )
                 credits_charged_brand = None
                 if success and _pricing_enabled and _agent_price > 0:
                     credits_charged_brand = await self._settle_credits(
@@ -278,7 +306,9 @@ class BrokerService:
                 return InvokeResponse(
                     success=success,
                     data=response_data if success else None,
-                    error=None if success else response_data.get("error", "Brand agent error"),
+                    error=None
+                    if success
+                    else response_data.get("error", "Brand agent error"),
                     latency_ms=latency_ms,
                     status_code=200 if success else 500,
                     conversation_id=conv_id,
@@ -299,8 +329,14 @@ class BrokerService:
 
         # SSRF protection
         try:
-            allowed = [h.strip() for h in settings.INVOKE_ENDPOINT_ALLOWED_HOSTS.split(",") if h.strip()]
-            validate_invoke_endpoint(agent.invoke_endpoint, allowed_hosts=allowed if allowed else None)
+            allowed = [
+                h.strip()
+                for h in settings.INVOKE_ENDPOINT_ALLOWED_HOSTS.split(",")
+                if h.strip()
+            ]
+            validate_invoke_endpoint(
+                agent.invoke_endpoint, allowed_hosts=allowed if allowed else None
+            )
         except ValueError as e:
             return InvokeResponse(
                 success=False,
@@ -310,7 +346,9 @@ class BrokerService:
             )
 
         timeout_sec = (
-            float(config.request_timeout_seconds) if config else DEFAULT_REQUEST_TIMEOUT_SECONDS
+            float(config.request_timeout_seconds)
+            if config
+            else DEFAULT_REQUEST_TIMEOUT_SECONDS
         )
         max_retries = (config.max_retries or 0) if config else 0
         retry_backoff = (config.retry_backoff_seconds or 1) if config else 1
@@ -325,10 +363,13 @@ class BrokerService:
         cred: Optional[object] = None
         cred_value: Optional[str] = None
         if auth_type in ("api_key", "bearer_token"):
-            cred = await self.registry_repository.get_agent_credential(agent.id, auth_type)
+            cred = await self.registry_repository.get_agent_credential(
+                agent.id, auth_type
+            )
             if cred:
                 try:
                     from src.core.credential_crypto import decrypt_credential
+
                     cred_value = decrypt_credential(cred.encrypted_value)
                 except ValueError:
                     cred_value = None
@@ -347,9 +388,17 @@ class BrokerService:
             "bearer_token": {"header": "Authorization", "scheme": "Bearer"},
         }
         defaults = auth_defaults.get(auth_type, {})
-        header_name = (cred.auth_header if cred and cred.auth_header else None) or defaults.get("header", "")
-        scheme = (cred.auth_scheme if cred and cred.auth_scheme is not None else None) or defaults.get("scheme", "")
-        header_value = f"{scheme} {cred_value}".strip() if (cred_value and scheme) else (cred_value or "")
+        header_name = (
+            cred.auth_header if cred and cred.auth_header else None
+        ) or defaults.get("header", "")
+        scheme = (
+            cred.auth_scheme if cred and cred.auth_scheme is not None else None
+        ) or defaults.get("scheme", "")
+        header_value = (
+            f"{scheme} {cred_value}".strip()
+            if (cred_value and scheme)
+            else (cred_value or "")
+        )
 
         # Use shared HTTP client when available; fall back to one-shot client
         client = self._http_client
@@ -484,20 +533,31 @@ class BrokerService:
         and returns an InvokeResponse.
         """
         # Resolve agent to check streaming support
-        agent = await self.registry_repository.get_agent_by_agent_id(invoke_request.agent_id)
-        supports_streaming = getattr(agent, "supports_streaming", False) if agent else False
+        agent = await self.registry_repository.get_agent_by_agent_id(
+            invoke_request.agent_id
+        )
+        supports_streaming = (
+            getattr(agent, "supports_streaming", False) if agent else False
+        )
 
         if not supports_streaming:
             # Fall back to normal invocation
             return await self.invoke_agent(
-                invoke_request, caller_user_id, integration_id,
-                conversation_id, message_id,
+                invoke_request,
+                caller_user_id,
+                integration_id,
+                conversation_id,
+                message_id,
             )
 
         # Stream from the agent's endpoint
         return self._stream_from_agent(
-            agent, invoke_request, caller_user_id, integration_id,
-            conversation_id, message_id,
+            agent,
+            invoke_request,
+            caller_user_id,
+            integration_id,
+            conversation_id,
+            message_id,
         )
 
     async def _stream_from_agent(
@@ -519,9 +579,12 @@ class BrokerService:
         auth_type = (agent.auth_type or "public").lower()
         header_name, header_value = "", ""
         if auth_type in ("api_key", "bearer_token"):
-            cred = await self.registry_repository.get_agent_credential(agent.id, auth_type)
+            cred = await self.registry_repository.get_agent_credential(
+                agent.id, auth_type
+            )
             if cred:
                 from src.core.credential_crypto import decrypt_credential
+
                 try:
                     cred_value = decrypt_credential(cred.encrypted_value)
                 except ValueError:
@@ -532,12 +595,22 @@ class BrokerService:
                         "bearer_token": {"header": "Authorization", "scheme": "Bearer"},
                     }
                     d = defaults.get(auth_type, {})
-                    header_name = (cred.auth_header or d.get("header", ""))
-                    scheme = (cred.auth_scheme if cred.auth_scheme is not None else None) or d.get("scheme", "")
-                    header_value = f"{scheme} {cred_value}".strip() if scheme else cred_value
+                    header_name = cred.auth_header or d.get("header", "")
+                    scheme = (
+                        cred.auth_scheme if cred.auth_scheme is not None else None
+                    ) or d.get("scheme", "")
+                    header_value = (
+                        f"{scheme} {cred_value}".strip() if scheme else cred_value
+                    )
 
-        config = await self.broker_config_repository.get_effective_config(integration_id)
-        timeout_sec = float(config.request_timeout_seconds) if config else DEFAULT_REQUEST_TIMEOUT_SECONDS
+        config = await self.broker_config_repository.get_effective_config(
+            integration_id
+        )
+        timeout_sec = (
+            float(config.request_timeout_seconds)
+            if config
+            else DEFAULT_REQUEST_TIMEOUT_SECONDS
+        )
 
         headers = {
             "Content-Type": "application/json",
@@ -610,7 +683,8 @@ class BrokerService:
             if not debited:
                 logger.warning(
                     "Insufficient balance for caller %s (need %d)",
-                    caller_user_id, price,
+                    caller_user_id,
+                    price,
                 )
                 return None
 

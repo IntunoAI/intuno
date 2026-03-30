@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from src.core.logging_config import setup_logging
 from src.core.middleware import RequestTracingMiddleware
+from src.core.rate_limit import RateLimitMiddleware
 from src.core.redis_client import close_redis, init_redis
 from src.core.settings import settings
 
@@ -81,7 +82,8 @@ async def _load_workflow_triggers(
             wf_def = WorkflowDef.model_validate(wf.definition)
             exec_repo = ExecutionRepository(session)
             execution = await exec_repo.create_execution(
-                workflow_id=wf.id, trigger_data={"source": "cron"},
+                workflow_id=wf.id,
+                trigger_data={"source": "cron"},
             )
             await session.commit()
 
@@ -104,7 +106,8 @@ async def _load_workflow_triggers(
             wf_def = WorkflowDef.model_validate(wf.definition)
             exec_repo = ExecutionRepository(session)
             execution = await exec_repo.create_execution(
-                workflow_id=wf.id, trigger_data=event_data,
+                workflow_id=wf.id,
+                trigger_data=event_data,
             )
             await session.commit()
 
@@ -134,9 +137,16 @@ async def _load_workflow_triggers(
 async def lifespan(app: FastAPI):
     # Warn if JWT secret is not configured (safe for local dev, dangerous in production)
     if not settings.JWT_SECRET_KEY:
-        logger.warning("JWT_SECRET_KEY is not set — authentication will not work. Set it in your .env file.")
-    elif settings.JWT_SECRET_KEY == "dev-secret-change-in-prod" and settings.ENVIRONMENT != "development":
-        logger.warning("JWT_SECRET_KEY is using the default dev value in a non-development environment. Change it immediately.")
+        logger.warning(
+            "JWT_SECRET_KEY is not set — authentication will not work. Set it in your .env file."
+        )
+    elif (
+        settings.JWT_SECRET_KEY == "dev-secret-change-in-prod"
+        and settings.ENVIRONMENT != "development"
+    ):
+        logger.warning(
+            "JWT_SECRET_KEY is using the default dev value in a non-development environment. Change it immediately."
+        )
 
     # Shared HTTP client for broker → agent invocations (connection pooling)
     app.state.http_client = httpx.AsyncClient(
@@ -192,10 +202,15 @@ app.add_middleware(
 # Request tracing middleware (X-Request-ID + timing)
 app.add_middleware(RequestTracingMiddleware)
 
+# Rate limiting middleware (Redis-backed, graceful degradation)
+app.add_middleware(RateLimitMiddleware)
+
+
 # Workflow exception handler
 @app.exception_handler(WorkflowAppException)
 async def handle_workflow_exception(_request: Request, exc: WorkflowAppException):
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 # ── Existing wisdom routers ──────────────────────────────────────────
 app.include_router(health_router)
@@ -226,28 +241,88 @@ app.include_router(ws_router, tags=["WebSocket"])
 app.mount("/mcp", create_mcp_app())
 
 
+@app.get("/.well-known/agent.json")
+async def a2a_agent_card():
+    """A2A-compatible AgentCard for agent-to-agent discovery."""
+    return JSONResponse(
+        {
+            "name": "Intuno Agent Network",
+            "description": "Registry, broker, and orchestrator for AI agents",
+            "url": "https://api.intuno.ai",
+            "version": settings.API_VERSION,
+            "capabilities": {
+                "streaming": True,
+                "pushNotifications": False,
+            },
+            "skills": [
+                {
+                    "id": "discover",
+                    "name": "Discover Agents",
+                    "description": "Semantic search for AI agents by natural-language query",
+                },
+                {
+                    "id": "invoke",
+                    "name": "Invoke Agent",
+                    "description": "Execute an agent with input data through the broker",
+                },
+                {
+                    "id": "orchestrate",
+                    "name": "Orchestrate Task",
+                    "description": "Multi-step task orchestration across multiple agents",
+                },
+            ],
+            "authentication": {
+                "schemes": ["apiKey", "bearer"],
+            },
+        }
+    )
+
+
 @app.get("/.well-known/mcp/server-card.json")
 async def mcp_server_card():
     """Public metadata for MCP marketplace scanners (e.g. Smithery)."""
-    return JSONResponse({
-        "serverInfo": {
-            "name": "Intuno Agent Network",
-            "version": settings.API_VERSION,
-        },
-        "authentication": {
-            "required": True,
-            "schemes": ["apiKey"],
-        },
-        "tools": [
-            {"name": "discover_agents", "description": "Search for AI agents by natural-language query"},
-            {"name": "get_agent_details", "description": "Get full details of a specific agent including its input schema"},
-            {"name": "invoke_agent", "description": "Invoke an agent with the provided input data"},
-            {"name": "create_task", "description": "Create and run a multi-step task via the Intuno orchestrator"},
-            {"name": "get_task_status", "description": "Check the current status and result of a previously created task"},
-        ],
-        "resources": [
-            {"uri": "intuno://agents/trending", "description": "Trending agents by recent invocation count"},
-            {"uri": "intuno://agents/new", "description": "Recently published agents (last 7 days)"},
-        ],
-        "prompts": [],
-    })
+    return JSONResponse(
+        {
+            "serverInfo": {
+                "name": "Intuno Agent Network",
+                "version": settings.API_VERSION,
+            },
+            "authentication": {
+                "required": True,
+                "schemes": ["apiKey"],
+            },
+            "tools": [
+                {
+                    "name": "discover_agents",
+                    "description": "Search for AI agents by natural-language query",
+                },
+                {
+                    "name": "get_agent_details",
+                    "description": "Get full details of a specific agent including its input schema",
+                },
+                {
+                    "name": "invoke_agent",
+                    "description": "Invoke an agent with the provided input data",
+                },
+                {
+                    "name": "create_task",
+                    "description": "Create and run a multi-step task via the Intuno orchestrator",
+                },
+                {
+                    "name": "get_task_status",
+                    "description": "Check the current status and result of a previously created task",
+                },
+            ],
+            "resources": [
+                {
+                    "uri": "intuno://agents/trending",
+                    "description": "Trending agents by recent invocation count",
+                },
+                {
+                    "uri": "intuno://agents/new",
+                    "description": "Recently published agents (last 7 days)",
+                },
+            ],
+            "prompts": [],
+        }
+    )

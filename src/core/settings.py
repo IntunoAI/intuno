@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     # Encryption key for per-agent credentials (defaults to JWT_SECRET_KEY-derived if empty)
     CREDENTIALS_ENCRYPTION_KEY: str = ""
 
+    # ── Rate limiting ─────────────────────────────────────────────────────
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REQUESTS_PER_MINUTE: int = 120
+
     # Orchestrator fallback: when discovery returns no candidates, use this agent
     ORCHESTRATOR_FALLBACK_AGENT_ID: Optional[str] = None
 
