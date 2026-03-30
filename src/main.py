@@ -126,7 +126,13 @@ async def _load_workflow_triggers(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Redis (shared by wisdom core, workflow, and economy)
+    # Warn if JWT secret is not configured (safe for local dev, dangerous in production)
+    if not settings.JWT_SECRET_KEY:
+        logger.warning("JWT_SECRET_KEY is not set — authentication will not work. Set it in your .env file.")
+    elif settings.JWT_SECRET_KEY == "dev-secret-change-in-prod" and settings.ENVIRONMENT != "development":
+        logger.warning("JWT_SECRET_KEY is using the default dev value in a non-development environment. Change it immediately.")
+
+    # Redis (shared by core, workflow, and economy)
     await init_redis()
     app.state.redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
 

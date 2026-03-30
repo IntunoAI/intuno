@@ -7,8 +7,7 @@ class Settings(BaseSettings):
     # Secrets
     DATABASE_URL: str = ""
     OPENAI_API_KEY: str = ""
-    SAPTIVA_API_KEY: str = ""
-    JWT_SECRET_KEY: str = "dev-secret-change-in-prod"
+    JWT_SECRET_KEY: str = ""
 
     # Configuration
     API_VERSION: str = "v1"
@@ -53,7 +52,7 @@ class Settings(BaseSettings):
     # Brand verification email (Resend provider)
     RESEND_API_KEY: str = ""
     EMAIL_FROM_ADDRESS: str = "noreply@example.com"
-    EMAIL_FROM_NAME: str = "Wisdom"
+    EMAIL_FROM_NAME: str = "Intuno"
     BRAND_VERIFICATION_CODE_EXPIRY_MINUTES: int = 15
 
     # Task (orchestrator) timeout – global task-level timeout in seconds

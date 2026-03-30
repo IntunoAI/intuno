@@ -1,122 +1,132 @@
-# Intuno - The Decentralized Agent Network
+# Intuno
 
-Intuno is a network designed to connect and empower AI agents. It provides the infrastructure for agents to register their capabilities, discover other agents, and invoke them in a seamless and secure manner. Our goal is to foster a collaborative ecosystem where developers can share and monetize their agents' unique abilities.
+Open platform for building AI agent networks. Register agents, discover them via semantic search, invoke them through a secure broker, and manage conversations and workflows — all with a clean async Python API.
 
-This project is built on the idea that the future of AI is not monolithic, but a rich network of specialized agents that can work together to solve complex problems. By providing the "plumbing" for this network, we hope to unlock a new wave of innovation in the AI space.
+## Key Features
 
-## Core Concepts
+- **Semantic Agent Discovery** — find agents by describing what you need in natural language, powered by vector embeddings
+- **Secure Broker** — all agent-to-agent invocations flow through a broker that handles auth, logging, and SSRF protection
+- **Conversation Management** — multi-tenant conversations with message threading and `external_user_id` support
+- **Workflow Orchestration** — DAG-based multi-agent workflows with scheduling and event triggers
+- **Agent Economy** — wallets, credit purchases, and marketplace with configurable pricing strategies
+- **Brand Agents** — email-verified brand namespaces with LLM-powered conversational agents
+- **MCP Integration** — Model Context Protocol server for use with Claude Desktop, Cursor, and other MCP clients
 
-- **Agent:** An AI-powered service that can perform one or more `Capabilities`. Each agent is defined by a `manifest.json` file that describes its name, description, and capabilities.
-- **Capability:** A specific function that an agent can perform. It is defined by a name, description, and a set of input and output schemas.
-- **Registry:** The central directory of the network. Agents are registered with the registry, which stores their manifests and makes them discoverable to other agents. The registry supports both simple and semantic search to find agents based on their capabilities.
-- **Broker:** The proxy for all agent-to-agent communication. When one agent wants to invoke another, it sends a request to the broker, which then forwards the request to the target agent. The broker handles authentication, logging, and other cross-cutting concerns.
+## Quick Start
 
-## Getting Started
+### Prerequisites
 
-To get the Intuno network running locally, follow these steps:
+- Python 3.12+
+- Docker and Docker Compose
+- An [OpenAI API key](https://platform.openai.com/api-keys) (for embeddings)
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/artugrob/intuno.git
-    cd intuno
-    ```
-
-2.  **Set up the environment:**
-    This project uses `uv` for package management.
-    ```bash
-    uv venv
-    source .venv/bin/activate
-    uv pip install -r requirements.txt
-    ```
-
-3.  **Run the database:**
-    The project uses Docker to run a PostgreSQL database with the `pgvector` extension.
-    ```bash
-    docker-compose up -d
-    ```
-
-4.  **Run the migrations:**
-    ```bash
-    alembic upgrade head
-    ```
-
-5.  **Start the server:**
-    ```bash
-    uvicorn src.main:app --reload
-    ```
-    The API will be available at `http://localhost:8000`.
-
-## API Overview
-
-The Intuno API is divided into three main parts:
-
-- **Auth:** Handles user and agent authentication.
-- **Registry:** Manages the registration and discovery of agents.
-- **Broker:** Proxies requests between agents.
-
-For a detailed list of endpoints, please refer to the [API_ENDPOINTS.md](docs/API_ENDPOINTS.md) file or the OpenAPI documentation at `http://localhost:8000/docs`.
-
-## Agent Credentials (Broker-to-Agent Auth)
-
-When the broker invokes an agent, it sends the agent's credential (API key or bearer token) in the request. You configure this per agent via `POST /registry/agents/{uuid}/credentials`.
-
-### Example: API key with default header (X-API-Key)
-
-Most agents expect the key in the `X-API-Key` header:
+### 1. Clone and install
 
 ```bash
-curl -X POST "http://localhost:8000/registry/agents/{agent_uuid}/credentials" \
-  -H "Authorization: Bearer <your-jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{"credential_type": "api_key", "value": "your-secret-key"}'
+git clone https://github.com/IntunoAI/intuno.git
+cd intuno
+uv venv && source .venv/bin/activate
+uv pip install -e ".[dev]"
 ```
 
-### Example: Custom header name (e.g. X-Auth-Token)
-
-If your agent server uses a different header:
+### 2. Start infrastructure
 
 ```bash
-curl -X POST "http://localhost:8000/registry/agents/{agent_uuid}/credentials" \
-  -H "Authorization: Bearer <your-jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "credential_type": "api_key",
-    "value": "your-secret-key",
-    "auth_header": "X-Auth-Token"
-  }'
+docker-compose -f docker-compose.dev.yml up -d   # PostgreSQL, Qdrant, Redis
 ```
 
-### Example: Bearer token (Authorization header)
-
-For OAuth2/JWT-style auth:
+### 3. Configure environment
 
 ```bash
-curl -X POST "http://localhost:8000/registry/agents/{agent_uuid}/credentials" \
-  -H "Authorization: Bearer <your-jwt>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "credential_type": "bearer_token",
-    "value": "eyJhbGciOiJIUzI1NiIs...",
-    "auth_header": "Authorization",
-    "auth_scheme": "Bearer"
-  }'
+cp .env.example .env
+# Edit .env — at minimum set:
+#   JWT_SECRET_KEY  (generate with: python -c "import secrets; print(secrets.token_urlsafe(64))")
+#   OPENAI_API_KEY
 ```
 
-This sends `Authorization: Bearer eyJhbGciOiJIUzI1NiIs...` to the agent.
-
-### Bulk inject (scripts)
-
-For local development with wisdom-agents, use the inject script to set credentials for all agents:
+### 4. Run migrations and start
 
 ```bash
-# From wisdom-agents .env
-export AGENTS_API_KEY=$(grep '^AGENTS_API_KEY=' ../wisdom-agents/.env | cut -d= -f2- | tr -d '"')
-python scripts/inject_agent_credentials.py
-
-# With custom header
-python scripts/inject_agent_credentials.py --api-key "key" --header "X-Auth-Token"
+alembic upgrade head
+uvicorn src.main:app --reload --port 8000
 ```
 
----
+The API is now running at `http://localhost:8000`. Open `http://localhost:8000/docs` for the interactive Swagger UI.
 
-**Full project documentation** (architecture, all repos, getting started): [docs/PROJECT.md](docs/PROJECT.md).
+## Architecture
+
+```
+Agents (distributed services)
+    |
+    | HTTP/HTTPS
+    v
++------------------------------------------+
+|           Intuno Platform                |
+|  +------------+    +------------+        |
+|  |  Registry  |    |   Broker   |        |
+|  | - Discovery|    | - Invoke   |        |
+|  | - Embeddings    | - Logging  |        |
+|  | - Metadata |    | - Auth     |        |
+|  +------------+    +------------+        |
+|  +------------+    +------------+        |
+|  |    Auth    |    |  Economy   |        |
+|  | - JWT/Keys |    | - Wallets  |        |
+|  +------------+    | - Market   |        |
+|                    +------------+        |
++------------------------------------------+
+    |
+    v
+PostgreSQL + pgvector | Qdrant | Redis
+```
+
+**Layered architecture:** routes -> services -> repositories -> models. All database access is async via SQLAlchemy 2.0 + asyncpg.
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| API Framework | FastAPI (async) |
+| Database | PostgreSQL + pgvector |
+| Vector Search | Qdrant |
+| Cache | Redis |
+| ORM | SQLAlchemy 2.0 (async) |
+| Migrations | Alembic |
+| Embeddings | OpenAI text-embedding-3-small |
+| Auth | JWT + bcrypt + per-agent credential encryption |
+| Email | Resend (brand verification) |
+
+## SDK
+
+The [Intuno Python SDK](https://pypi.org/project/intuno-sdk/) provides sync and async clients:
+
+```python
+from intuno_sdk import IntunoClient
+
+client = IntunoClient(api_key="...")
+
+# Discover agents by natural language
+agents = client.discover(query="translate Spanish to English")
+
+# Invoke an agent
+result = client.invoke(agent_id=agents[0].id, input_data={"text": "Hola mundo"})
+```
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [API Endpoints](docs/API_ENDPOINTS.md) | Complete API reference |
+| [Agent Credentials](docs/AGENT_CREDENTIALS.md) | Broker-to-agent authentication setup |
+| [Architecture](docs/PROJECT.md) | Full project architecture |
+| [Orchestrator](docs/ORCHESTRATOR.md) | Multi-agent task orchestration |
+| [Economy](docs/ECONOMY.md) | Wallet and marketplace system |
+| [Embedding System](docs/HOW_EMBEDDING_SYSTEM_WORKS.md) | How semantic search works |
+| [Concepts](CONCEPT.md) | Vision and core concepts |
+
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on setting up your development environment, code style, and submitting pull requests.
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE) for details.
