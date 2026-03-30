@@ -69,6 +69,23 @@ class Settings(BaseSettings):
     # Orchestrator fallback: when discovery returns no candidates, use this agent
     ORCHESTRATOR_FALLBACK_AGENT_ID: Optional[str] = None
 
+    # ── Workflow settings (from agent-os) ──────────────────────────────
+    WORKFLOW_CONTEXT_BUS_TTL_SECONDS: int = 86400
+    WORKFLOW_CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = 5
+    WORKFLOW_CIRCUIT_BREAKER_WINDOW_SECONDS: int = 60
+    WORKFLOW_CIRCUIT_BREAKER_COOLDOWN_SECONDS: int = 300
+    WORKFLOW_DEFAULT_MAX_DURATION_SECONDS: int = 300
+    WORKFLOW_DEFAULT_MAX_CONCURRENT_PER_AGENT: int = 10
+    WORKFLOW_DEFAULT_MAX_CONCURRENT_EXECUTIONS: int = 5
+
+    # ── Economy settings (from agent-economy) ──────────────────────────
+    ECONOMY_WELCOME_BONUS_CREDITS: int = 500
+    ECONOMY_CREDIT_PACKAGES: list[dict] = [
+        {"id": "starter", "credits": 500, "price_cents": 500, "label": "$5"},
+        {"id": "pro", "credits": 1200, "price_cents": 1000, "label": "$10"},
+        {"id": "enterprise", "credits": 5000, "price_cents": 3500, "label": "$35"},
+    ]
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",  # Ignore extra environment variables

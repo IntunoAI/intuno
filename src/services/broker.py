@@ -181,6 +181,23 @@ class BrokerService:
                         status_code=429,
                     )
 
+        # Billing: pre-flight balance check for priced agents
+        _pricing_enabled = getattr(agent, "pricing_enabled", False)
+        _agent_price_raw = getattr(agent, "base_price", None)
+        _agent_price = int(_agent_price_raw) if (_agent_price_raw and _agent_price_raw > 0) else 0
+
+        if _pricing_enabled and _agent_price > 0:
+            from src.economy.repositories.wallets import WalletRepository as _WR
+            _wr = _WR(self.registry_repository.session)
+            _caller_wallet = await _wr.get_by_user_id(caller_user_id)
+            if not _caller_wallet or _caller_wallet.balance < _agent_price:
+                return InvokeResponse(
+                    success=False,
+                    error="Insufficient credits",
+                    latency_ms=int((time.time() - start_time) * 1000),
+                    status_code=402,
+                )
+
         request_payload = invoke_request.input or {}
 
         # Brand agent: invoke via LLM internally
@@ -227,6 +244,11 @@ class BrokerService:
                     message_id=msg_id,
                 )
                 await self.invocation_log_repository.create_invocation_log(invocation_log)
+                credits_charged_brand = None
+                if success and _pricing_enabled and _agent_price > 0:
+                    credits_charged_brand = await self._settle_credits(
+                        caller_user_id, agent, _agent_price
+                    )
                 return InvokeResponse(
                     success=success,
                     data=response_data if success else None,
@@ -234,6 +256,7 @@ class BrokerService:
                     latency_ms=latency_ms,
                     status_code=200 if success else 500,
                     conversation_id=conv_id,
+                    credits_charged=credits_charged_brand,
                 )
 
         # Persist user message
@@ -373,6 +396,13 @@ class BrokerService:
                 )
             )
 
+        # Economy: settle credits after successful paid invocation
+        credits_charged = None
+        if success and _pricing_enabled and _agent_price > 0:
+            credits_charged = await self._settle_credits(
+                caller_user_id, agent, _agent_price
+            )
+
         # Log invocation
         invocation_log = InvocationLog(
             caller_user_id=caller_user_id,
@@ -395,4 +425,82 @@ class BrokerService:
             latency_ms=latency_ms,
             status_code=response_status_code,
             conversation_id=conv_id,
+            credits_charged=credits_charged,
         )
+
+    async def _settle_credits(
+        self,
+        caller_user_id: UUID,
+        agent,
+        price: int,
+    ) -> int | None:
+        """Settle credits from caller to agent owner after a paid invocation.
+
+        Debits the caller's **user wallet** and credits the invoked
+        **agent wallet** (auto-created if it doesn't exist yet).
+
+        Returns the number of credits charged, or None if settlement failed.
+        """
+        import logging
+        import uuid as _uuid
+
+        from src.economy.models.wallet import Transaction, Wallet
+        from src.economy.repositories.wallets import WalletRepository
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            session = self.registry_repository.session
+            wallet_repo = WalletRepository(session)
+
+            # Debit the caller's user wallet
+            caller_wallet = await wallet_repo.get_by_user_id(caller_user_id)
+            if not caller_wallet:
+                logger.warning(
+                    "No user wallet for caller %s — skipping settlement",
+                    caller_user_id,
+                )
+                return None
+
+            debited = await wallet_repo.atomic_debit(caller_wallet.id, price)
+            if not debited:
+                logger.warning(
+                    "Insufficient balance for caller %s (need %d)",
+                    caller_user_id, price,
+                )
+                return None
+
+            reference_id = _uuid.uuid4()
+
+            await wallet_repo.create_transaction(
+                Transaction(
+                    wallet_id=caller_wallet.id,
+                    amount=-price,
+                    tx_type="invocation_debit",
+                    reference_id=reference_id,
+                    description=f"Payment for {agent.agent_id} invocation",
+                )
+            )
+
+            # Credit the agent's own wallet (auto-create if needed)
+            agent_wallet = await wallet_repo.get_by_agent_id(agent.id)
+            if not agent_wallet:
+                agent_wallet = await wallet_repo.create(
+                    Wallet(agent_id=agent.id, wallet_type="agent", balance=0)
+                )
+
+            await wallet_repo.atomic_credit(agent_wallet.id, price)
+            await wallet_repo.create_transaction(
+                Transaction(
+                    wallet_id=agent_wallet.id,
+                    amount=price,
+                    tx_type="invocation_credit",
+                    reference_id=reference_id,
+                    description=f"Revenue from {agent.agent_id} invocation",
+                )
+            )
+
+            return price
+        except Exception:
+            logger.exception("Settlement failed for agent %s", agent.agent_id)
+            return None

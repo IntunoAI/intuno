@@ -31,6 +31,7 @@ class User(BaseModel):
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="user", cascade="all, delete-orphan")
     invocation_logs = relationship("InvocationLog", foreign_keys="InvocationLog.caller_user_id", overlaps="caller_user")
+    wallet = relationship("Wallet", back_populates="user", uselist=False, lazy="selectin")
 
 
 class ApiKey(BaseModel):

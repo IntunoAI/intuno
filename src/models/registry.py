@@ -3,7 +3,7 @@
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from sqlalchemy import ARRAY, Boolean, Column, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import ARRAY, Boolean, Column, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 from sqlalchemy.orm import relationship
 
@@ -60,6 +60,17 @@ class Agent(BaseModel):
     qdrant_point_id: Column[UUID] = Column(PostgresUUID, nullable=True, index=True)
     embedding_version: Column[str] = Column(String, nullable=False, default="1.0", server_default="1.0")
 
+    # Economy: pricing fields
+    pricing_strategy: Column[Optional[str]] = Column(
+        String, nullable=True, default=None,
+    )  # "fixed" | "dynamic" | "auction" | None (free)
+    base_price: Column[Optional[float]] = Column(
+        Float, nullable=True, default=None,
+    )  # Credits per invocation (None = free)
+    pricing_enabled: Column[bool] = Column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )  # Opt-in to credit billing
+
     # Relationships
     user = relationship("User", back_populates="agents")
     brand = relationship(
@@ -70,6 +81,7 @@ class Agent(BaseModel):
     invocation_logs = relationship("InvocationLog", back_populates="target_agent")
     ratings = relationship("AgentRating", back_populates="agent", cascade="all, delete-orphan")
     credentials = relationship("AgentCredential", back_populates="agent", cascade="all, delete-orphan")
+    wallet = relationship("Wallet", back_populates="agent", uselist=False, lazy="selectin")
 
     # Indexes for performance
     __table_args__ = (

@@ -25,6 +25,7 @@ class InvokeResponse(BaseModel):
     latency_ms: int
     status_code: int
     conversation_id: Optional[UUID] = None
+    credits_charged: Optional[int] = None
 
 
 class BrokerConfigResponse(BaseModel):

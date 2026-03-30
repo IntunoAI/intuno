@@ -98,7 +98,45 @@ class AuthService:
             first_name=user_data.first_name,
             last_name=user_data.last_name,
         )
-        return await self.auth_repository.create_user(user)
+        created_user = await self.auth_repository.create_user(user)
+
+        # Auto-provision economy wallet with welcome credits
+        await self._provision_wallet(created_user)
+
+        return created_user
+
+    async def _provision_wallet(self, user: User) -> None:
+        """Create a user-level economy wallet with welcome credits."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        try:
+            from src.economy.repositories.wallets import WalletRepository
+            from src.economy.models.wallet import Wallet, Transaction
+            from src.core.settings import settings
+
+            session = self.auth_repository.session
+            wallet_repo = WalletRepository(session)
+
+            wallet = Wallet(
+                user_id=user.id,
+                wallet_type="user",
+                balance=settings.ECONOMY_WELCOME_BONUS_CREDITS,
+            )
+            created_wallet = await wallet_repo.create(wallet)
+
+            if settings.ECONOMY_WELCOME_BONUS_CREDITS > 0:
+                await wallet_repo.create_transaction(
+                    Transaction(
+                        wallet_id=created_wallet.id,
+                        amount=settings.ECONOMY_WELCOME_BONUS_CREDITS,
+                        tx_type="welcome_grant",
+                        description="Welcome bonus credits",
+                    )
+                )
+            await session.commit()
+        except Exception:
+            logger.exception("Failed to provision wallet for user %s", user.id)
 
     async def authenticate_user(self, login_data: UserLogin) -> Optional[User]:
         """
