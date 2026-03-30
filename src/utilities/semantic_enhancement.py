@@ -2,12 +2,18 @@
 
 from typing import Dict, List, Any, Optional
 
-from openai import AsyncOpenAI
-
 from src.core.settings import settings
 
-# Initialize OpenAI client for LLM calls
-llm_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+# Lazy-initialized OpenAI client (avoids crash when OPENAI_API_KEY is empty)
+_llm_client = None
+
+
+def _get_llm_client():
+    global _llm_client
+    if _llm_client is None:
+        from openai import AsyncOpenAI
+        _llm_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    return _llm_client
 
 
 class SemanticEnhancementService:
@@ -68,7 +74,7 @@ Generate an enhanced, comprehensive text description that:
 Return only the enhanced text, without any additional commentary or formatting."""
 
         try:
-            response = await llm_client.chat.completions.create(
+            response = await _get_llm_client().chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -109,7 +115,7 @@ Generate an enhanced version of this query that:
 Return only the enhanced query text, without any additional commentary or formatting."""
 
         try:
-            response = await llm_client.chat.completions.create(
+            response = await _get_llm_client().chat.completions.create(
                 model=self.model,
                 messages=[
                     {

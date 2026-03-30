@@ -186,6 +186,8 @@ async def run_task_background(task_id: UUID) -> None:
             embedding_service=embedding_service,
             brand_repository=brand_repo,
         )
+        from src.services.broker import get_shared_http_client
+
         broker_service = BrokerService(
             invocation_log_repository=invocation_log_repo,
             broker_config_repository=broker_config_repo,
@@ -193,6 +195,9 @@ async def run_task_background(task_id: UUID) -> None:
             conversation_repository=conversation_repo,
             message_repository=message_repo,
         )
+        shared_client = get_shared_http_client()
+        if shared_client is not None:
+            broker_service.set_http_client(shared_client)
         executor = Executor(
             registry_service=registry_service,
             broker_service=broker_service,

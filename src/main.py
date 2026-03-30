@@ -139,6 +139,7 @@ async def lifespan(app: FastAPI):
         logger.warning("JWT_SECRET_KEY is using the default dev value in a non-development environment. Change it immediately.")
 
     # Shared HTTP client for broker → agent invocations (connection pooling)
+    from src.services.broker import set_shared_http_client
     app.state.http_client = httpx.AsyncClient(
         limits=httpx.Limits(
             max_keepalive_connections=settings.BROKER_HTTP_POOL_SIZE,
@@ -146,6 +147,7 @@ async def lifespan(app: FastAPI):
         ),
         follow_redirects=False,
     )
+    set_shared_http_client(app.state.http_client)
 
     # Redis (shared by core, workflow, and economy)
     await init_redis()

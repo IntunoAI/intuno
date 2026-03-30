@@ -138,6 +138,8 @@ class _ServiceContext:
             embedding_service=embedding_service,
             brand_repository=brand_repo,
         )
+        from src.services.broker import get_shared_http_client
+
         self.broker = BrokerService(
             invocation_log_repository=invocation_log_repo,
             broker_config_repository=broker_config_repo,
@@ -145,6 +147,9 @@ class _ServiceContext:
             conversation_repository=conversation_repo,
             message_repository=message_repo,
         )
+        shared_client = get_shared_http_client()
+        if shared_client is not None:
+            self.broker.set_http_client(shared_client)
         self.task = TaskService(
             task_repository=task_repo,
             conversation_repository=conversation_repo,

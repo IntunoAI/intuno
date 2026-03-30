@@ -117,6 +117,7 @@ class RegistryService:
             pricing_strategy=registration.pricing_strategy,
             base_price=registration.base_price,
             pricing_enabled=registration.pricing_enabled,
+            supports_streaming=registration.supports_streaming,
         )
 
         created_agent = await self.registry_repository.create_agent(agent)
@@ -271,6 +272,8 @@ class RegistryService:
             agent.base_price = update.base_price
         if update.pricing_enabled is not None:
             agent.pricing_enabled = update.pricing_enabled
+        if update.supports_streaming is not None:
+            agent.supports_streaming = update.supports_streaming
 
         # Regenerate embedding
         if enhance:

@@ -28,6 +28,20 @@ from src.utilities.brand_agent_llm import generate_brand_agent_response
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 30
 
+# Module-level shared HTTP client (set from app lifespan, used by background tasks)
+_shared_http_client: Optional[httpx.AsyncClient] = None
+
+
+def set_shared_http_client(client: httpx.AsyncClient) -> None:
+    """Set the module-level shared HTTP client (called from app lifespan)."""
+    global _shared_http_client
+    _shared_http_client = client
+
+
+def get_shared_http_client() -> Optional[httpx.AsyncClient]:
+    """Get the module-level shared HTTP client."""
+    return _shared_http_client
+
 _TEXT_KEYS = ("message", "query", "text", "content", "prompt", "input")
 
 
