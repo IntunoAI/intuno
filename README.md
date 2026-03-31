@@ -129,4 +129,4 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE) for details.
+PolyForm Noncommercial 1.0.0 — free for non-commercial use. See [LICENSE](LICENSE) for details.
