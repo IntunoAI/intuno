@@ -158,7 +158,7 @@ async def a2a_task_send(
         )
 
 
-# ── A2A Agent Discovery ──────────────────────────────────────────────
+# ── A2A Agent Discovery & Import ─────────────────────────────────────
 
 
 @router.get("/agents")
@@ -172,3 +172,129 @@ async def list_a2a_agents(
         if getattr(agent, "is_active", False):
             cards.append(build_agent_card(agent))
     return JSONResponse({"agents": cards})
+
+
+class A2AImportRequest(BaseModel):
+    """Import an external A2A agent by its base URL."""
+
+    url: str = Field(..., description="Base URL of the A2A-compatible agent")
+
+
+class A2ABatchImportRequest(BaseModel):
+    """Import multiple external A2A agents."""
+
+    urls: list[str] = Field(..., description="List of A2A agent base URLs")
+
+
+@router.post("/agents/import")
+async def import_a2a_agent(
+    data: A2AImportRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """Import an external A2A agent as a first-class Intuno agent.
+
+    Fetches the Agent Card from the given URL, creates a registry entry,
+    generates embeddings, and indexes in Qdrant. The agent becomes fully
+    discoverable and invocable — just like any natively registered agent.
+    """
+    discovery_service = await _get_discovery_service(request)
+    discovery_service.set_http_client(request.app.state.http_client)
+
+    try:
+        agent = await discovery_service.import_agent(data.url, current_user.id)
+        return JSONResponse(
+            {
+                "success": True,
+                "agent_id": agent.agent_id,
+                "name": agent.name,
+                "description": agent.description,
+                "invoke_endpoint": agent.invoke_endpoint,
+                "tags": agent.tags,
+            },
+            status_code=201,
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            {"success": False, "error": str(exc)},
+            status_code=400,
+        )
+
+
+@router.post("/agents/import/batch")
+async def import_a2a_agents_batch(
+    data: A2ABatchImportRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """Import multiple external A2A agents in one request."""
+    discovery_service = await _get_discovery_service(request)
+    discovery_service.set_http_client(request.app.state.http_client)
+
+    results = await discovery_service.import_multiple(data.urls, current_user.id)
+    return JSONResponse({"results": results})
+
+
+@router.post("/agents/{agent_id}/refresh")
+async def refresh_a2a_agent(
+    agent_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """Re-fetch the Agent Card and update the registry entry."""
+    discovery_service = await _get_discovery_service(request)
+    discovery_service.set_http_client(request.app.state.http_client)
+
+    agent = await discovery_service.registry_repository.get_agent_by_agent_id(agent_id)
+    if not agent:
+        return JSONResponse(
+            build_a2a_json_rpc_error(-32602, f"Agent '{agent_id}' not found"),
+            status_code=404,
+        )
+
+    try:
+        updated = await discovery_service.refresh_agent(agent.id, current_user.id)
+        return JSONResponse(
+            {
+                "success": True,
+                "agent_id": updated.agent_id,
+                "name": updated.name,
+            }
+        )
+    except ValueError as exc:
+        return JSONResponse(
+            {"success": False, "error": str(exc)},
+            status_code=400,
+        )
+
+
+@router.get("/agents/fetch-card")
+async def fetch_agent_card_preview(
+    url: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """Preview an A2A Agent Card without importing it."""
+    discovery_service = await _get_discovery_service(request)
+    discovery_service.set_http_client(request.app.state.http_client)
+
+    card = await discovery_service.fetch_agent_card(url)
+    if card is None:
+        return JSONResponse(
+            {"success": False, "error": f"Could not fetch Agent Card from {url}"},
+            status_code=404,
+        )
+    return JSONResponse({"success": True, "card": card})
+
+
+async def _get_discovery_service(request: Request):
+    """Helper to build a discovery service from request context."""
+    from src.network.a2a.discovery import A2ADiscoveryService
+    from src.database import AsyncSessionLocal
+    from src.utilities.embedding import EmbeddingService
+
+    session = AsyncSessionLocal()
+    return A2ADiscoveryService(
+        registry_repository=RegistryRepository(session=session),
+        embedding_service=EmbeddingService(),
+    )
