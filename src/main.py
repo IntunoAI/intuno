@@ -248,7 +248,7 @@ async def a2a_agent_card():
         {
             "name": "Intuno Agent Network",
             "description": "Registry, broker, and orchestrator for AI agents",
-            "url": "https://api.intuno.ai",
+            "url": settings.BASE_URL,
             "version": settings.API_VERSION,
             "capabilities": {
                 "streaming": True,

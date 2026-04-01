@@ -1,4 +1,4 @@
-"""Redis-backed sliding window rate limiting middleware.
+"""Redis-backed fixed-window rate limiting middleware.
 
 Uses a simple fixed-window counter per client (by IP or authenticated user).
 Gracefully degrades to allowing all requests when Redis is unavailable.
@@ -41,13 +41,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         try:
             pipe = redis.pipeline(transaction=True)
             pipe.incr(window_key)
-            pipe.ttl(window_key)
+            pipe.expire(window_key, window_seconds + 1)
             results = await pipe.execute()
-            count, ttl = results[0], results[1]
-
-            # Set expiry on first request in this window
-            if ttl == -1:
-                await redis.expire(window_key, window_seconds + 1)
+            count = results[0]
 
             limit = settings.RATE_LIMIT_REQUESTS_PER_MINUTE
             remaining = max(0, limit - count)
