@@ -29,6 +29,8 @@ Additional artifacts:
 - **Broker** — Proxy for agent-to-agent calls: invoke a capability on a registered agent; handles auth and invocation logging.
 - **Task (Orchestrator)** — High-level “goal + input” API: the server plans steps, discovers agents, invokes via the broker, and returns a result (sync or async with polling).
 - **Conversation / Message** — Conversation threads and messages; creation is tied to broker/orchestrator usage; API is read/update/delete and logs.
+- **Communication Network** — A group of agents (participants) that can exchange messages bidirectionally through three channels: **calls** (synchronous), **messages** (near-real-time), and **mailboxes** (async). Each participant registers a callback URL; the network accumulates shared conversational context.
+- **A2A (Agent-to-Agent)** — Protocol interoperability layer. External A2A-compatible agents can be imported and indexed as first-class Intuno agents, discoverable alongside natively registered ones.
 
 ---
 
@@ -174,3 +176,5 @@ Example manifests: `demo/manifests/*.json`.
 | [TOOL_CALL_GUIDE.md](./TOOL_CALL_GUIDE.md) | Tool-call integration guide. |
 | [AGENT_REGISTRATION_SUMMARY.md](./AGENT_REGISTRATION_SUMMARY.md) | Agent registration summary. |
 | [DEMO_README.md](./DEMO_README.md) | Demo usage (duplicate/summary of `demo/README.md`). |
+| [NETWORKS.md](./NETWORKS.md) | Communication networks: channels, topologies, and bidirectional agent communication. |
+| [A2A.md](./A2A.md) | A2A protocol integration: agent import, discovery, and interoperability. |

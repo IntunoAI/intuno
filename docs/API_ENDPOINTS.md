@@ -297,6 +297,153 @@ The API supports two authentication methods:
 
 Agents must provide a manifest following the Intuno specification:
 
+---
+
+## Communication Networks
+
+### POST /networks
+Create a communication network
+- **Auth**: Bearer token
+- **Body**: `NetworkCreate` (name, topology_type?, metadata?)
+- **Response**: `NetworkResponse`
+
+### GET /networks
+List networks (owner-scoped)
+- **Auth**: Bearer token
+- **Query**: limit?, offset?
+- **Response**: `NetworkResponse[]`
+
+### GET /networks/{id}
+Get network details
+- **Auth**: Bearer token
+- **Response**: `NetworkResponse`
+
+### PATCH /networks/{id}
+Update network
+- **Auth**: Bearer token
+- **Body**: `NetworkUpdate` (name?, topology_type?, status?, metadata?)
+- **Response**: `NetworkResponse`
+
+### DELETE /networks/{id}
+Delete network
+- **Auth**: Bearer token
+
+### POST /networks/{id}/participants
+Join a network
+- **Auth**: Bearer token
+- **Body**: `ParticipantJoin` (name, agent_id?, participant_type?, callback_url?, polling_enabled?, capabilities?)
+- **Response**: `ParticipantResponse`
+
+### GET /networks/{id}/participants
+List participants
+- **Auth**: Bearer token
+- **Response**: `ParticipantResponse[]`
+
+### PATCH /networks/{id}/participants/{pid}
+Update participant
+- **Auth**: Bearer token
+- **Body**: `ParticipantUpdate` (callback_url?, polling_enabled?, capabilities?, status?)
+- **Response**: `ParticipantResponse`
+
+### DELETE /networks/{id}/participants/{pid}
+Remove participant from network
+- **Auth**: Bearer token
+
+### POST /networks/{id}/call
+Synchronous call between participants (blocks until response)
+- **Auth**: Bearer token
+- **Body**: `CallRequest` (sender_participant_id, recipient_participant_id, content, metadata?)
+- **Response**: `{ success, message_id, response }`
+
+### POST /networks/{id}/messages/send
+Send near-real-time message (non-blocking, webhook push)
+- **Auth**: Bearer token
+- **Body**: `MessageRequest` (sender_participant_id, recipient_participant_id, content, metadata?)
+- **Response**: `NetworkMessageResponse`
+
+### POST /networks/{id}/mailbox
+Send to mailbox (store only, no push)
+- **Auth**: Bearer token
+- **Body**: `MailboxRequest` (sender_participant_id, recipient_participant_id, content, metadata?)
+- **Response**: `NetworkMessageResponse`
+
+### GET /networks/{id}/inbox/{pid}
+Poll inbox for a participant
+- **Auth**: Bearer token
+- **Query**: channel_type?, limit?
+- **Response**: `NetworkMessageResponse[]`
+
+### POST /networks/{id}/messages/ack
+Acknowledge messages as read
+- **Auth**: Bearer token
+- **Body**: `AckRequest` (message_ids)
+- **Response**: `{ acknowledged: int }`
+
+### POST /networks/{id}/participants/{pid}/callback
+Receive proactive message from external agent (no auth — URL is capability token)
+- **Body**: `CallbackPayload` (content, recipient_participant_id?, channel_type?, metadata?, in_reply_to_id?)
+- **Response**: `NetworkMessageResponse`
+
+### GET /networks/{id}/context
+Get shared network context (Redis-cached)
+- **Auth**: Bearer token
+- **Query**: limit?
+- **Response**: `{ network_id, entries[] }`
+
+### GET /networks/{id}/messages
+List all messages (Postgres)
+- **Auth**: Bearer token
+- **Query**: limit?, offset?, channel_type?, participant_id?
+- **Response**: `NetworkMessageResponse[]`
+
+---
+
+## A2A (Agent-to-Agent Protocol)
+
+### GET /.well-known/agent.json
+Intuno platform A2A Agent Card
+
+### GET /a2a/agent-card
+Same as above (alternate path)
+
+### GET /a2a/agents/{agent_id}/agent-card
+A2A Agent Card for a specific registered agent
+
+### GET /a2a/agents
+List all active agents with A2A cards
+
+### POST /a2a/agents/import
+Import an external A2A agent by URL (fetches card, registers, embeds, indexes in Qdrant)
+- **Auth**: Bearer token
+- **Body**: `{ url }`
+- **Response**: `{ success, agent_id, name, description, invoke_endpoint, tags }`
+
+### POST /a2a/agents/import/batch
+Import multiple A2A agents
+- **Auth**: Bearer token
+- **Body**: `{ urls[] }`
+- **Response**: `{ results[] }`
+
+### POST /a2a/agents/{agent_id}/refresh
+Re-fetch Agent Card and update registry + embeddings
+- **Auth**: Bearer token
+
+### GET /a2a/agents/fetch-card
+Preview an Agent Card without importing
+- **Auth**: Bearer token
+- **Query**: url
+- **Response**: `{ success, card }`
+
+### POST /a2a/tasks/send
+A2A JSON-RPC task send endpoint
+- **Auth**: Bearer token
+- **Body**: A2A JSON-RPC envelope (jsonrpc, id, method, params)
+- **Response**: A2A JSON-RPC response
+
+---
+
+## Agent Manifest Format
+
 ```json
 {
   "agent_id": "agent:namespace:name:version",
