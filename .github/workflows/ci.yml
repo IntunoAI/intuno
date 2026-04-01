@@ -19,7 +19,6 @@ jobs:
       - run: .venv/bin/ruff format --check src/
 
   test:
-    if: false  # temporarily skipped — economy simulation tests removed
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -57,4 +56,4 @@ jobs:
           version: "latest"
       - run: uv venv && uv pip install -e ".[dev]"
       - run: .venv/bin/alembic upgrade head
-      - run: .venv/bin/pytest tests/ -v
+      - run: .venv/bin/pytest tests/ -v -m "not integration"
