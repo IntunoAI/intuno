@@ -106,6 +106,25 @@ def _validate_step_refs(wf: WorkflowDef) -> None:
             raise DSLParseError(
                 f"Plan step '{step.id}' must have a 'goal' field"
             )
+        if step.resolved_type == "loop" and not step.loop:
+            raise DSLParseError(
+                f"Loop step '{step.id}' must have a 'loop' configuration"
+            )
+        if step.resolved_type == "loop" and step.loop:
+            if not step.loop.body:
+                raise DSLParseError(
+                    f"Loop step '{step.id}' must have at least one step in its body"
+                )
+        if step.resolved_type == "aggregate" and not step.aggregate:
+            raise DSLParseError(
+                f"Aggregate step '{step.id}' must have an 'aggregate' configuration"
+            )
+        if step.resolved_type == "aggregate" and step.aggregate:
+            for source_id in step.aggregate.sources:
+                if source_id not in step_ids:
+                    raise DSLParseError(
+                        f"Aggregate step '{step.id}' references unknown source '{source_id}'"
+                    )
 
 
 def _detect_cycles(wf: WorkflowDef) -> None:

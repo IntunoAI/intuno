@@ -21,6 +21,13 @@ from src.workflow.models.entities import (  # noqa: F401
     WorkflowExecution,
 )
 
+# Network models (communication networks)
+from src.network.models.entities import (  # noqa: F401
+    CommunicationNetwork,
+    NetworkMessage,
+    NetworkParticipant,
+)
+
 # Economy models (from agent-economy)
 from src.economy.models.wallet import Transaction, Wallet  # noqa: F401
 from src.economy.models.order import Order, Trade  # noqa: F401
@@ -45,6 +52,10 @@ __all__ = [
     "WorkflowExecution",
     "ProcessEntry",
     "ContextEntry",
+    # Network
+    "CommunicationNetwork",
+    "NetworkParticipant",
+    "NetworkMessage",
     # Economy
     "Wallet",
     "Transaction",

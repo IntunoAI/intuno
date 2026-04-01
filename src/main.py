@@ -37,6 +37,12 @@ from src.workflow.routes.workflows import router as workflow_router
 from src.workflow.routes.executions import router as execution_router
 from src.workflow.routes.webhooks import router as webhook_router
 
+# Network routers (communication networks)
+from src.network.routes.networks import router as network_router
+from src.network.routes.channels import router as channel_router
+from src.network.routes.callbacks import router as callback_router
+from src.network.a2a.routes import router as a2a_router
+
 # Economy routers (from agent-economy)
 from src.economy.routes.wallets import router as wallets_router
 from src.economy.routes.market import router as market_router
@@ -231,6 +237,12 @@ app.include_router(workflow_router, prefix="/workflows", tags=["Workflows"])
 app.include_router(execution_router, tags=["Executions"])
 app.include_router(webhook_router, tags=["Webhooks"])
 
+# ── Network routers (communication networks) ─────────────────────────
+app.include_router(network_router, tags=["Networks"])
+app.include_router(channel_router, tags=["Channels"])
+app.include_router(callback_router, tags=["Callbacks"])
+app.include_router(a2a_router, tags=["A2A"])
+
 # ── Economy routers (from agent-economy) ─────────────────────────────
 app.include_router(wallets_router, prefix="/wallets", tags=["Wallets"])
 app.include_router(market_router, prefix="/market", tags=["Market"])
@@ -244,38 +256,9 @@ app.mount("/mcp", create_mcp_app())
 @app.get("/.well-known/agent.json")
 async def a2a_agent_card():
     """A2A-compatible AgentCard for agent-to-agent discovery."""
-    return JSONResponse(
-        {
-            "name": "Intuno Agent Network",
-            "description": "Registry, broker, and orchestrator for AI agents",
-            "url": settings.BASE_URL,
-            "version": settings.API_VERSION,
-            "capabilities": {
-                "streaming": True,
-                "pushNotifications": False,
-            },
-            "skills": [
-                {
-                    "id": "discover",
-                    "name": "Discover Agents",
-                    "description": "Semantic search for AI agents by natural-language query",
-                },
-                {
-                    "id": "invoke",
-                    "name": "Invoke Agent",
-                    "description": "Execute an agent with input data through the broker",
-                },
-                {
-                    "id": "orchestrate",
-                    "name": "Orchestrate Task",
-                    "description": "Multi-step task orchestration across multiple agents",
-                },
-            ],
-            "authentication": {
-                "schemes": ["apiKey", "bearer"],
-            },
-        }
-    )
+    from src.network.a2a.agent_card import build_platform_card
+
+    return JSONResponse(build_platform_card())
 
 
 @app.get("/.well-known/mcp/server-card.json")
