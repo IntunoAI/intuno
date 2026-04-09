@@ -1,7 +1,7 @@
 """add communication networks, participants, and messages tables
 
-Revision ID: add_communication_networks
-Revises: add_supports_streaming
+Revision ID: df05a2cb4da2
+Revises: 2c185be2c005
 Create Date: 2026-04-01 00:01:00.000000
 
 """
@@ -10,52 +10,22 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 # revision identifiers, used by Alembic.
-revision = "add_communication_networks"
-down_revision = "add_supports_streaming"
+revision = "df05a2cb4da2"
+down_revision = "2c185be2c005"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    # Create enum types
-    op.execute(
-        "CREATE TYPE topologytype AS ENUM ('mesh', 'star', 'ring', 'custom')"
-    )
-    op.execute(
-        "CREATE TYPE networkstatus AS ENUM ('active', 'paused', 'closed')"
-    )
-    op.execute(
-        "CREATE TYPE participanttype AS ENUM ('agent', 'persona', 'orchestrator')"
-    )
-    op.execute(
-        "CREATE TYPE participantstatus AS ENUM ('active', 'disconnected', 'removed')"
-    )
-    op.execute(
-        "CREATE TYPE channeltype AS ENUM ('call', 'message', 'mailbox')"
-    )
-    op.execute(
-        "CREATE TYPE messagestatus AS ENUM ('pending', 'delivered', 'read', 'failed')"
-    )
-
     # Communication networks
     op.create_table(
         "communication_networks",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),
         sa.Column("owner_id", UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
-        sa.Column(
-            "topology_type",
-            sa.Enum("mesh", "star", "ring", "custom", name="topologytype", create_type=False),
-            nullable=False,
-            server_default="mesh",
-        ),
+        sa.Column("topology_type", sa.String(20), nullable=False, server_default="mesh"),
         sa.Column("metadata", JSONB, nullable=True),
-        sa.Column(
-            "status",
-            sa.Enum("active", "paused", "closed", name="networkstatus", create_type=False),
-            nullable=False,
-            server_default="active",
-        ),
+        sa.Column("status", sa.String(20), nullable=False, server_default="active"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column(
             "updated_at",
@@ -77,22 +47,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=True),
-        sa.Column(
-            "participant_type",
-            sa.Enum("agent", "persona", "orchestrator", name="participanttype", create_type=False),
-            nullable=False,
-            server_default="agent",
-        ),
+        sa.Column("participant_type", sa.String(20), nullable=False, server_default="agent"),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("callback_url", sa.Text, nullable=True),
         sa.Column("polling_enabled", sa.Boolean, nullable=False, server_default="false"),
         sa.Column("capabilities", JSONB, nullable=True),
-        sa.Column(
-            "status",
-            sa.Enum("active", "disconnected", "removed", name="participantstatus", create_type=False),
-            nullable=False,
-            server_default="active",
-        ),
+        sa.Column("status", sa.String(20), nullable=False, server_default="active"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column(
             "updated_at",
@@ -126,19 +86,10 @@ def upgrade() -> None:
             sa.ForeignKey("network_participants.id"),
             nullable=True,
         ),
-        sa.Column(
-            "channel_type",
-            sa.Enum("call", "message", "mailbox", name="channeltype", create_type=False),
-            nullable=False,
-        ),
+        sa.Column("channel_type", sa.String(20), nullable=False),
         sa.Column("content", sa.Text, nullable=False),
         sa.Column("metadata", JSONB, nullable=True),
-        sa.Column(
-            "status",
-            sa.Enum("pending", "delivered", "read", "failed", name="messagestatus", create_type=False),
-            nullable=False,
-            server_default="pending",
-        ),
+        sa.Column("status", sa.String(20), nullable=False, server_default="pending"),
         sa.Column(
             "in_reply_to_id",
             UUID(as_uuid=True),
@@ -169,10 +120,3 @@ def downgrade() -> None:
     op.drop_table("network_messages")
     op.drop_table("network_participants")
     op.drop_table("communication_networks")
-
-    op.execute("DROP TYPE IF EXISTS messagestatus")
-    op.execute("DROP TYPE IF EXISTS channeltype")
-    op.execute("DROP TYPE IF EXISTS participantstatus")
-    op.execute("DROP TYPE IF EXISTS participanttype")
-    op.execute("DROP TYPE IF EXISTS networkstatus")
-    op.execute("DROP TYPE IF EXISTS topologytype")

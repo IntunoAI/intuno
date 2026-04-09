@@ -1,7 +1,7 @@
 """add_missing_tables
 
 Revision ID: 8848633307e2
-Revises: add_brand_details_col
+Revises: f5f2658b44aa
 Create Date: 2026-03-26 00:09:05.296614
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = '8848633307e2'
-down_revision: Union[str, Sequence[str], None] = 'add_brand_details_col'
+down_revision: Union[str, Sequence[str], None] = 'f5f2658b44aa'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

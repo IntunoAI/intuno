@@ -8,7 +8,7 @@ import enum
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import Column, Enum, ForeignKey, String, Text, Boolean
+from sqlalchemy import Column, ForeignKey, String, Text, Boolean
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 from sqlalchemy.orm import relationship
 
@@ -63,11 +63,11 @@ class CommunicationNetwork(BaseModel):
     )
     name: Column[str] = Column(String(255), nullable=False)
     topology_type: Column[str] = Column(
-        Enum(TopologyType), nullable=False, default=TopologyType.mesh
+        String(20), nullable=False, default=TopologyType.mesh.value
     )
     metadata_: Column[Optional[dict]] = Column("metadata", JSONB, nullable=True)
     status: Column[str] = Column(
-        Enum(NetworkStatus), nullable=False, default=NetworkStatus.active
+        String(20), nullable=False, default=NetworkStatus.active.value
     )
 
     # Relationships
@@ -97,14 +97,14 @@ class NetworkParticipant(BaseModel):
         PostgresUUID, ForeignKey("agents.id"), nullable=True
     )
     participant_type: Column[str] = Column(
-        Enum(ParticipantType), nullable=False, default=ParticipantType.agent
+        String(20), nullable=False, default=ParticipantType.agent.value
     )
     name: Column[str] = Column(String(255), nullable=False)
     callback_url: Column[Optional[str]] = Column(Text, nullable=True)
     polling_enabled: Column[bool] = Column(Boolean, nullable=False, default=False)
     capabilities: Column[Optional[dict]] = Column(JSONB, nullable=True)
     status: Column[str] = Column(
-        Enum(ParticipantStatus), nullable=False, default=ParticipantStatus.active
+        String(20), nullable=False, default=ParticipantStatus.active.value
     )
 
     # Relationships
@@ -137,12 +137,12 @@ class NetworkMessage(BaseModel):
         PostgresUUID, ForeignKey("network_participants.id"), nullable=True
     )
     channel_type: Column[str] = Column(
-        Enum(ChannelType), nullable=False
+        String(20), nullable=False
     )
     content: Column[str] = Column(Text, nullable=False)
     metadata_: Column[Optional[dict]] = Column("metadata", JSONB, nullable=True)
     status: Column[str] = Column(
-        Enum(MessageStatus), nullable=False, default=MessageStatus.pending
+        String(20), nullable=False, default=MessageStatus.pending.value
     )
     in_reply_to_id: Column[Optional[UUID]] = Column(
         PostgresUUID, ForeignKey("network_messages.id"), nullable=True

@@ -1,7 +1,7 @@
 """make invocation_logs target_agent_id nullable
 
 Revision ID: 82c36691dae3
-Revises: add_pricing_enabled
+Revises: 68b32751b955
 Create Date: 2026-03-26 01:58:10.344452
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '82c36691dae3'
-down_revision: Union[str, Sequence[str], None] = 'add_pricing_enabled'
+down_revision: Union[str, Sequence[str], None] = '68b32751b955'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

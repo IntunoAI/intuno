@@ -1,18 +1,19 @@
+import os
+import sys
 from logging.config import fileConfig
 
+from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import  create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
-# Import your models here
-from src.models.base import Base
+
 # Import all models to ensure they are registered with the metadata
 from src.models import *
 
-import os
-import sys
-from dotenv import load_dotenv
+# Import your models here
+from src.models.base import Base
 
 # Add the src directory to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,8 +21,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Load environment variables
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres")
-
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
+)
 
 
 # this is the Alembic Config object, which provides
@@ -37,17 +39,19 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 target_metadata = Base.metadata
 
+
 def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
         context.run_migrations()
 
+
 async def run_async_migrations() -> None:
     """In this scenario we need to create an Engine
     and associate a connection with the context."""
 
-    connectable =  create_async_engine(
+    connectable = create_async_engine(
         DATABASE_URL,
         poolclass=pool.NullPool,
         future=True,
@@ -58,11 +62,14 @@ async def run_async_migrations() -> None:
 
     await connectable.dispose()
 
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
 
     import asyncio
+
     asyncio.run(run_async_migrations())
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
@@ -78,6 +85,7 @@ def run_migrations_offline() -> None:
 
     with context.begin_transaction():
         context.run_migrations()
+
 
 if context.is_offline_mode():
     run_migrations_offline()

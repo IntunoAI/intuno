@@ -1,7 +1,7 @@
 """add halt_codes table for distributed kill switch
 
-Revision ID: add_halt_codes
-Revises: add_is_admin_to_users
+Revision ID: 4ea22876971b
+Revises: 66d2226d8cc3
 Create Date: 2026-04-09 00:02:00.000000
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
 
 # revision identifiers, used by Alembic.
-revision = "add_halt_codes"
-down_revision = "add_is_admin_to_users"
+revision = "4ea22876971b"
+down_revision = "66d2226d8cc3"
 branch_labels = None
 depends_on = None
 
