@@ -79,6 +79,10 @@ async def a2a_task_send(
     from src.network.utils.context_manager import NetworkContextManager
     from src.database import get_redis
 
+    # Safety check: reject if platform is in emergency halt
+    from src.services.safety import check_platform_halt
+    await check_platform_halt()
+
     params = data.params
     task_data = params.get("task", {})
     network_id = params.get("network_id")

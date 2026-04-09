@@ -103,6 +103,10 @@ class Settings(BaseSettings):
     NETWORK_CALLBACK_TIMEOUT_SECONDS: int = 30
     NETWORK_MESSAGE_DELIVERY_MAX_RETRIES: int = 3
 
+    # ── Safety & Governance ─────────────────────────────────────────────
+    SAFETY_CHECK_ENABLED: bool = True
+    AGENT_STATUS_CACHE_TTL: int = 300  # seconds to cache agent active status in Redis
+
     # ── Economy settings (from agent-economy) ──────────────────────────
     ECONOMY_WELCOME_BONUS_CREDITS: int = 500
     ECONOMY_CREDIT_PACKAGES: list[dict] = [

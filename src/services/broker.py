@@ -88,6 +88,10 @@ class BrokerService:
         """
         start_time = time.time()
 
+        # Safety check: reject if platform is in emergency halt
+        from src.services.safety import check_platform_halt
+        await check_platform_halt()
+
         # Resolve conversation_id and message_id from request if not passed
         conv_id = conversation_id or invoke_request.conversation_id
         msg_id = message_id or invoke_request.message_id
@@ -532,13 +536,25 @@ class BrokerService:
         async generator of dicts. Otherwise, falls back to a normal invocation
         and returns an InvokeResponse.
         """
+        # Safety check: reject if platform is in emergency halt
+        from src.services.safety import check_platform_halt
+        await check_platform_halt()
+
         # Resolve agent to check streaming support
         agent = await self.registry_repository.get_agent_by_agent_id(
             invoke_request.agent_id
         )
-        supports_streaming = (
-            getattr(agent, "supports_streaming", False) if agent else False
-        )
+
+        # Check agent exists and is active (fixes gap where streaming path skipped this)
+        if not agent or not agent.is_active:
+            return InvokeResponse(
+                success=False,
+                error="Agent not found or inactive",
+                latency_ms=0,
+                status_code=404,
+            )
+
+        supports_streaming = getattr(agent, "supports_streaming", False)
 
         if not supports_streaming:
             # Fall back to normal invocation

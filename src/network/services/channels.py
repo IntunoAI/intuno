@@ -258,6 +258,10 @@ class ChannelService:
         This is the key to bidirectionality: external agents POST to their
         reply_url and this method records the message in the network.
         """
+        # Safety check: reject if platform is in emergency halt
+        from src.services.safety import check_platform_halt
+        await check_platform_halt()
+
         sender = await self.repo.get_participant(participant_id)
         if not sender or sender.network_id != network_id:
             raise NotFoundException("Participant")
@@ -322,6 +326,10 @@ class ChannelService:
         sender_id: UUID,
         recipient_id: UUID,
     ) -> tuple[NetworkParticipant, NetworkParticipant, CommunicationNetwork]:
+        # Safety check: reject if platform is in emergency halt
+        from src.services.safety import check_agent_active, check_platform_halt
+        await check_platform_halt()
+
         network = await self.repo.get_network(network_id)
         if not network:
             raise NotFoundException("Network")
@@ -339,6 +347,12 @@ class ChannelService:
             raise NotFoundException("Recipient participant")
         if recipient.status != ParticipantStatus.active:
             raise BadRequestException("Recipient is not active")
+
+        # Safety check: verify linked agents are still active
+        if sender.agent_id:
+            await check_agent_active(sender.agent_id)
+        if recipient.agent_id:
+            await check_agent_active(recipient.agent_id)
 
         return sender, recipient, network
 
