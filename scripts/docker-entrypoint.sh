@@ -5,5 +5,8 @@ set -e
 mkdir -p /app/.redis
 redis-server --daemonize yes --dir /app/.redis
 
+# Run database migrations
+alembic upgrade head
+
 # Run FastAPI as main process (replace shell so signals propagate)
 exec uvicorn src.main:app --host 0.0.0.0 --port 8000
