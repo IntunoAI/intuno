@@ -30,6 +30,8 @@ from src.routes.invocation_log import router as invocation_log_router
 from src.routes.message import router as message_router
 from src.routes.registry import router as registry_router
 from src.routes.task import router as task_router
+from src.routes.admin import router as admin_router
+from src.routes.safety import router as safety_router
 from src.mcp_app import create_mcp_app
 
 # Workflow routers (from agent-os)
@@ -231,6 +233,10 @@ app.include_router(conversation_router)
 app.include_router(message_router)
 app.include_router(invocation_log_router)
 app.include_router(task_router)
+
+# ── Admin / Safety routers ───────────────────────────────────────────
+app.include_router(admin_router, tags=["Admin"])
+app.include_router(safety_router, tags=["Safety"])
 
 # ── Workflow routers (from agent-os) ─────────────────────────────────
 app.include_router(workflow_router, prefix="/workflows", tags=["Workflows"])

@@ -50,6 +50,10 @@ class Resolver:
         if cache_key in self._cache:
             return self._cache[cache_key]
 
+        # Safety check: reject if platform is halted
+        from src.services.safety import check_platform_halt
+        await check_platform_halt()
+
         if ref.startswith(SEARCH_PREFIX):
             query = ref[len(SEARCH_PREFIX):].strip()
             target = await self._discover(query, exclude_ids or [])
@@ -132,6 +136,10 @@ class Resolver:
 
         for agent, _distance in results:
             if agent.agent_id in cb_excluded:
+                continue
+            if not agent.is_active:
+                logger.info("Skipping agent '%s' — inactive", agent.agent_id)
+                cb_excluded.append(agent.agent_id)
                 continue
             available = await self._circuit_breaker.is_available(agent.agent_id)
             if not available:
