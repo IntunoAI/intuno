@@ -22,6 +22,7 @@ class User(BaseModel):
     last_name: Column[str] = Column(String, nullable=True)
     phone_number: Column[str] = Column(String, nullable=True, unique=True)
     is_active: Column[bool] = Column(Boolean, default=True, nullable=False)
+    is_admin: Column[bool] = Column(Boolean, default=False, nullable=False)
 
     # Relationships
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")

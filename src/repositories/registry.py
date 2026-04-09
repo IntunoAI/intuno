@@ -39,6 +39,13 @@ class RegistryRepository:
         )
         return result.scalar_one_or_none()
 
+    async def find_agent_by_endpoint(self, invoke_endpoint: str) -> Optional[Agent]:
+        """Find an agent by its invoke endpoint URL."""
+        result = await self.session.execute(
+            select(Agent).where(Agent.invoke_endpoint == invoke_endpoint)
+        )
+        return result.scalar_one_or_none()
+
     async def get_agents_by_user_id(self, user_id: UUID) -> List[Agent]:
         """Get all agents for a user."""
         result = await self.session.execute(

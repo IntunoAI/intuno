@@ -12,6 +12,7 @@ from src.models.conversation import Conversation
 from src.models.message import Message
 from src.models.registry import Agent, AgentCredential, AgentRating
 from src.models.task import Task
+from src.models.halt_code import HaltCode
 
 # Workflow models (from agent-os)
 from src.workflow.models.entities import (  # noqa: F401
@@ -19,6 +20,13 @@ from src.workflow.models.entities import (  # noqa: F401
     ProcessEntry,
     WorkflowDefinition,
     WorkflowExecution,
+)
+
+# Network models (communication networks)
+from src.network.models.entities import (  # noqa: F401
+    CommunicationNetwork,
+    NetworkMessage,
+    NetworkParticipant,
 )
 
 # Economy models (from agent-economy)
@@ -40,11 +48,16 @@ __all__ = [
     "AgentCredential",
     "InvocationLog",
     "Task",
+    "HaltCode",
     # Workflow
     "WorkflowDefinition",
     "WorkflowExecution",
     "ProcessEntry",
     "ContextEntry",
+    # Network
+    "CommunicationNetwork",
+    "NetworkParticipant",
+    "NetworkMessage",
     # Economy
     "Wallet",
     "Transaction",

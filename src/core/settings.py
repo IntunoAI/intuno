@@ -96,6 +96,17 @@ class Settings(BaseSettings):
     WORKFLOW_DEFAULT_MAX_CONCURRENT_PER_AGENT: int = 10
     WORKFLOW_DEFAULT_MAX_CONCURRENT_EXECUTIONS: int = 5
 
+    # ── Network settings (communication networks) ─────────────────────
+    NETWORK_CONTEXT_TTL_SECONDS: int = 86400 * 7  # 7 days
+    NETWORK_CONTEXT_MAX_ENTRIES: int = 500  # max messages in Redis context stream
+    NETWORK_MAX_PARTICIPANTS: int = 50
+    NETWORK_CALLBACK_TIMEOUT_SECONDS: int = 30
+    NETWORK_MESSAGE_DELIVERY_MAX_RETRIES: int = 3
+
+    # ── Safety & Governance ─────────────────────────────────────────────
+    SAFETY_CHECK_ENABLED: bool = True
+    AGENT_STATUS_CACHE_TTL: int = 300  # seconds to cache agent active status in Redis
+
     # ── Economy settings (from agent-economy) ──────────────────────────
     ECONOMY_WELCOME_BONUS_CREDITS: int = 500
     ECONOMY_CREDIT_PACKAGES: list[dict] = [

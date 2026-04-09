@@ -271,6 +271,8 @@ class RegistryService:
             agent.base_price = update.base_price
         if update.pricing_enabled is not None:
             agent.pricing_enabled = update.pricing_enabled
+        if update.is_active is not None:
+            agent.is_active = update.is_active
 
         # Regenerate embedding
         if enhance:

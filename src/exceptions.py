@@ -12,6 +12,8 @@ __all__ = [
     "ValidationException",
     "DatabaseException",
     "RateLimitException",
+    "PlatformHaltedException",
+    "AgentDisabledException",
 ]
 
 
@@ -91,3 +93,18 @@ class RateLimitException(BaseCustomException):
 
     def __init__(self, detail: str = "Rate limit exceeded. Please try again later"):
         super().__init__(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
+
+
+# Safety & Governance Exceptions
+class PlatformHaltedException(BaseCustomException):
+    """Exception raised when the platform is in emergency halt mode"""
+
+    def __init__(self, detail: str = "Platform is in emergency halt mode. All agent operations are suspended."):
+        super().__init__(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+
+
+class AgentDisabledException(BaseCustomException):
+    """Exception raised when a disabled agent is invoked"""
+
+    def __init__(self, detail: str = "Agent has been disabled by an administrator"):
+        super().__init__(status_code=status.HTTP_403_FORBIDDEN, detail=detail)

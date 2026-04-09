@@ -11,6 +11,7 @@ def pytest_collection_modifyitems(config, items):
         "test_economy.py",
         "test_workflow.py",
         "test_new_orchestrator.py",
+        "test_networks.py",
     }
     for item in items:
         if item.path and item.path.name in integration_files:

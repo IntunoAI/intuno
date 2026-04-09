@@ -1,0 +1,178 @@
+"""add communication networks, participants, and messages tables
+
+Revision ID: add_communication_networks
+Revises: add_supports_streaming
+Create Date: 2026-04-01 00:01:00.000000
+
+"""
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+# revision identifiers, used by Alembic.
+revision = "add_communication_networks"
+down_revision = "add_supports_streaming"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    # Create enum types
+    op.execute(
+        "CREATE TYPE topologytype AS ENUM ('mesh', 'star', 'ring', 'custom')"
+    )
+    op.execute(
+        "CREATE TYPE networkstatus AS ENUM ('active', 'paused', 'closed')"
+    )
+    op.execute(
+        "CREATE TYPE participanttype AS ENUM ('agent', 'persona', 'orchestrator')"
+    )
+    op.execute(
+        "CREATE TYPE participantstatus AS ENUM ('active', 'disconnected', 'removed')"
+    )
+    op.execute(
+        "CREATE TYPE channeltype AS ENUM ('call', 'message', 'mailbox')"
+    )
+    op.execute(
+        "CREATE TYPE messagestatus AS ENUM ('pending', 'delivered', 'read', 'failed')"
+    )
+
+    # Communication networks
+    op.create_table(
+        "communication_networks",
+        sa.Column("id", UUID(as_uuid=True), primary_key=True),
+        sa.Column("owner_id", UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False),
+        sa.Column("name", sa.String(255), nullable=False),
+        sa.Column(
+            "topology_type",
+            sa.Enum("mesh", "star", "ring", "custom", name="topologytype", create_type=False),
+            nullable=False,
+            server_default="mesh",
+        ),
+        sa.Column("metadata", JSONB, nullable=True),
+        sa.Column(
+            "status",
+            sa.Enum("active", "paused", "closed", name="networkstatus", create_type=False),
+            nullable=False,
+            server_default="active",
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
+    )
+    op.create_index("ix_communication_networks_owner_id", "communication_networks", ["owner_id"])
+
+    # Network participants
+    op.create_table(
+        "network_participants",
+        sa.Column("id", UUID(as_uuid=True), primary_key=True),
+        sa.Column(
+            "network_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("communication_networks.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column("agent_id", UUID(as_uuid=True), sa.ForeignKey("agents.id"), nullable=True),
+        sa.Column(
+            "participant_type",
+            sa.Enum("agent", "persona", "orchestrator", name="participanttype", create_type=False),
+            nullable=False,
+            server_default="agent",
+        ),
+        sa.Column("name", sa.String(255), nullable=False),
+        sa.Column("callback_url", sa.Text, nullable=True),
+        sa.Column("polling_enabled", sa.Boolean, nullable=False, server_default="false"),
+        sa.Column("capabilities", JSONB, nullable=True),
+        sa.Column(
+            "status",
+            sa.Enum("active", "disconnected", "removed", name="participantstatus", create_type=False),
+            nullable=False,
+            server_default="active",
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
+    )
+    op.create_index("ix_network_participants_network_id", "network_participants", ["network_id"])
+    op.create_index("ix_network_participants_agent_id", "network_participants", ["agent_id"])
+
+    # Network messages
+    op.create_table(
+        "network_messages",
+        sa.Column("id", UUID(as_uuid=True), primary_key=True),
+        sa.Column(
+            "network_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("communication_networks.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "sender_participant_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("network_participants.id"),
+            nullable=False,
+        ),
+        sa.Column(
+            "recipient_participant_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("network_participants.id"),
+            nullable=True,
+        ),
+        sa.Column(
+            "channel_type",
+            sa.Enum("call", "message", "mailbox", name="channeltype", create_type=False),
+            nullable=False,
+        ),
+        sa.Column("content", sa.Text, nullable=False),
+        sa.Column("metadata", JSONB, nullable=True),
+        sa.Column(
+            "status",
+            sa.Enum("pending", "delivered", "read", "failed", name="messagestatus", create_type=False),
+            nullable=False,
+            server_default="pending",
+        ),
+        sa.Column(
+            "in_reply_to_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("network_messages.id"),
+            nullable=True,
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
+    )
+    op.create_index("ix_network_messages_network_id", "network_messages", ["network_id"])
+    op.create_index(
+        "ix_network_messages_sender", "network_messages", ["sender_participant_id"]
+    )
+    op.create_index(
+        "ix_network_messages_recipient", "network_messages", ["recipient_participant_id"]
+    )
+    op.create_index(
+        "ix_network_messages_created_at", "network_messages", ["network_id", "created_at"]
+    )
+
+
+def downgrade() -> None:
+    op.drop_table("network_messages")
+    op.drop_table("network_participants")
+    op.drop_table("communication_networks")
+
+    op.execute("DROP TYPE IF EXISTS messagestatus")
+    op.execute("DROP TYPE IF EXISTS channeltype")
+    op.execute("DROP TYPE IF EXISTS participantstatus")
+    op.execute("DROP TYPE IF EXISTS participanttype")
+    op.execute("DROP TYPE IF EXISTS networkstatus")
+    op.execute("DROP TYPE IF EXISTS topologytype")

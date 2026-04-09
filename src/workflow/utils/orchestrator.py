@@ -209,6 +209,21 @@ class Orchestrator:
             )
             return
 
+        if step.resolved_type == "loop":
+            await self._handle_loop(
+                step, entry_id, context_id, trigger_data,
+                engine, step_outputs, default_recovery, step_map,
+                skipped, execution_id, workflow_def, t0,
+            )
+            return
+
+        if step.resolved_type == "aggregate":
+            await self._handle_aggregate(
+                step, entry_id, context_id,
+                step_outputs, execution_id, t0,
+            )
+            return
+
         if step.resolved_type == "plan":
             await self._handle_plan(
                 step, entry_id, context_id, trigger_data,
@@ -468,3 +483,172 @@ class Orchestrator:
                                 workflow_def,
                             )
                         )
+
+    # -- Loop (feedback cycle) handling ----------------------------------------
+
+    async def _handle_loop(
+        self,
+        step: WorkflowStep,
+        entry_id: uuid.UUID,
+        context_id: uuid.UUID,
+        trigger_data: dict[str, Any],
+        engine: TemplateEngine,
+        step_outputs: dict[str, Any],
+        default_recovery: RecoveryConfig,
+        step_map: dict[str, WorkflowStep],
+        skipped: set[str],
+        execution_id: uuid.UUID,
+        workflow_def: WorkflowDef,
+        t0: float,
+    ) -> None:
+        """Execute a feedback loop until convergence or max iterations."""
+        from src.network.utils.convergence import (
+            MaxIterationsDetector,
+            create_detector,
+        )
+
+        if not step.loop:
+            raise StepExecutionError(f"Loop step '{step.id}' has no loop config")
+
+        loop_cfg = step.loop
+        max_iter = loop_cfg.max_iterations
+
+        # Create convergence detector + mandatory max iterations safety net
+        convergence = create_detector(
+            loop_cfg.convergence.type,
+            {
+                "threshold": loop_cfg.convergence.threshold,
+                "max_iterations": max_iter,
+            },
+        )
+        safety = MaxIterationsDetector(max_iterations=max_iter)
+
+        previous_output: Any = None
+        iteration_outputs: list[Any] = []
+
+        for iteration in range(1, max_iter + 1):
+            logger.info(
+                "Loop '%s' iteration %d/%d", step.id, iteration, max_iter,
+            )
+
+            # Run all body steps sequentially for this iteration
+            iter_outputs: dict[str, Any] = {}
+            for body_step in loop_cfg.body:
+                # Create a process entry for this iteration's step
+                iter_step_id = f"{step.id}::iter{iteration}::{body_step.id}"
+                entry = await self._exec_repo.create_process_entry(
+                    execution_id=execution_id,
+                    step_id=iter_step_id,
+                    step_type=body_step.resolved_type,
+                    target_name=body_step.target_ref or body_step.id,
+                )
+
+                # Inject loop iteration context
+                loop_context = {
+                    "iteration": iteration,
+                    "previous_output": previous_output,
+                    "iteration_outputs": iteration_outputs,
+                }
+                step_outputs[f"{step.id}::loop"] = loop_context
+
+                await self._execute_step(
+                    body_step,
+                    entry.id,
+                    context_id,
+                    trigger_data,
+                    step_outputs,
+                    default_recovery,
+                    {bs.id: bs for bs in loop_cfg.body},
+                    set(),
+                    execution_id,
+                    workflow_def,
+                )
+
+                iter_outputs[body_step.id] = step_outputs.get(body_step.id)
+
+            # The last body step's output is considered the iteration output
+            last_body_step = loop_cfg.body[-1]
+            current_output = step_outputs.get(last_body_step.id, {}).get("output")
+            iteration_outputs.append(current_output)
+
+            # Check convergence
+            converged = await convergence.has_converged(
+                iteration, current_output, previous_output,
+                {"step_outputs": step_outputs},
+            )
+            hit_max = await safety.has_converged(
+                iteration, current_output, previous_output, {},
+            )
+
+            previous_output = current_output
+
+            if converged or hit_max:
+                reason = "converged" if converged else "max_iterations"
+                logger.info(
+                    "Loop '%s' stopped after %d iterations: %s",
+                    step.id, iteration, reason,
+                )
+                break
+
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        output_data = {
+            "iterations": len(iteration_outputs),
+            "converged": converged if 'converged' in dir() else False,
+            "final_output": previous_output,
+        }
+
+        step_outputs[step.id] = {"output": output_data}
+        await self._ctx.write(context_id, step.id, output_data)
+        await self._exec_repo.mark_process_completed(
+            entry_id, output=output_data, duration_ms=duration_ms,
+        )
+
+    # -- Aggregate (fan-in) handling -------------------------------------------
+
+    async def _handle_aggregate(
+        self,
+        step: WorkflowStep,
+        entry_id: uuid.UUID,
+        context_id: uuid.UUID,
+        step_outputs: dict[str, Any],
+        execution_id: uuid.UUID,
+        t0: float,
+    ) -> None:
+        """Aggregate outputs from multiple source steps."""
+        from src.network.utils.aggregator import create_aggregator
+
+        if not step.aggregate:
+            raise StepExecutionError(
+                f"Aggregate step '{step.id}' has no aggregate config"
+            )
+
+        agg_cfg = step.aggregate
+
+        # Collect outputs from source steps
+        inputs: list[dict[str, Any]] = []
+        missing_sources: list[str] = []
+        for source_id in agg_cfg.sources:
+            source_output = step_outputs.get(source_id)
+            if source_output is None:
+                missing_sources.append(source_id)
+            else:
+                inputs.append({
+                    "source": source_id,
+                    "output": source_output.get("output"),
+                })
+
+        if missing_sources:
+            logger.warning(
+                "Aggregate step '%s' is missing outputs from: %s",
+                step.id, missing_sources,
+            )
+
+        aggregator = create_aggregator(agg_cfg.strategy)
+        result = await aggregator.aggregate(inputs)
+
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        step_outputs[step.id] = {"output": result}
+        await self._ctx.write(context_id, step.id, result)
+        await self._exec_repo.mark_process_completed(
+            entry_id, output=result, duration_ms=duration_ms,
+        )

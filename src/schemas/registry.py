@@ -115,6 +115,7 @@ class AgentUpdate(BaseModel):
     base_price: Optional[float] = None
     pricing_enabled: Optional[bool] = None
     supports_streaming: Optional[bool] = None
+    is_active: Optional[bool] = None
 
     @field_validator("auth_type")
     @classmethod
