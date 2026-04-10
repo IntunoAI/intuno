@@ -180,9 +180,16 @@ async def lifespan(app: FastAPI):
     await scheduler.start()
     await event_consumer.start()
 
+    # Network delivery worker (retries failed webhook deliveries)
+    from src.network.utils.delivery_worker import DeliveryWorker
+    delivery_worker = DeliveryWorker(app.state.redis)
+    await delivery_worker.start(http_client=app.state.http_client)
+    app.state.delivery_worker = delivery_worker
+
     yield
 
     # Shutdown
+    await delivery_worker.stop()
     await app.state.http_client.aclose()
     await event_consumer.stop()
     await scheduler.stop()

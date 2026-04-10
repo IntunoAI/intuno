@@ -66,6 +66,7 @@ class NetworkContextManager:
                     "recipient": data["recipient"] or None,
                     "channel": data["channel"],
                     "content": data["content"],
+                    "message_id": data.get("message_id") or None,
                     "timestamp": float(data["ts"]),
                 }
             )

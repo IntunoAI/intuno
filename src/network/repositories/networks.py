@@ -176,6 +176,26 @@ class NetworkRepository:
         messages.reverse()  # chronological order
         return messages
 
+    async def get_inbox(
+        self,
+        network_id: UUID,
+        recipient_id: UUID,
+        limit: int = 50,
+    ) -> list[NetworkMessage]:
+        """Get unread messages where participant is the recipient."""
+        q = (
+            select(NetworkMessage)
+            .where(
+                NetworkMessage.network_id == network_id,
+                NetworkMessage.recipient_participant_id == recipient_id,
+                NetworkMessage.status.in_(["pending", "delivered"]),
+            )
+            .order_by(NetworkMessage.created_at)
+            .limit(limit)
+        )
+        result = await self.session.execute(q)
+        return list(result.scalars().all())
+
     async def update_message(self, message: NetworkMessage) -> NetworkMessage:
         await self.session.commit()
         await self.session.refresh(message)

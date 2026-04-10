@@ -50,7 +50,11 @@ class A2ADiscoveryService:
         """Fetch an A2A Agent Card from a remote URL.
 
         Tries well-known paths if the URL doesn't point directly to a card.
+        Validates the URL to prevent SSRF attacks.
         """
+        from src.network.utils.url_validator import validate_callback_url
+        validate_callback_url(base_url)
+
         client = self._http_client
         owns_client = client is None
         if owns_client:

@@ -7,7 +7,6 @@ delivered to the recipient via the appropriate mechanism.
 
 import json
 import logging
-import time
 from typing import Any, Optional
 from uuid import UUID
 
@@ -15,7 +14,7 @@ import httpx
 from fastapi import Depends
 
 from src.core.settings import settings
-from src.exceptions import BadRequestException, NotFoundException
+from src.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from src.network.models.entities import (
     ChannelType,
     CommunicationNetwork,
@@ -27,7 +26,9 @@ from src.network.models.entities import (
 )
 from src.network.models.schemas import NetworkMessageCreate
 from src.network.repositories.networks import NetworkRepository
+from src.network.utils.callback_auth import sign_callback_url
 from src.network.utils.context_manager import NetworkContextManager
+from src.network.utils.topology import TopologyValidator
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class ChannelService:
         self.repo = repo
         self.ctx = context_manager
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._topology = TopologyValidator()
 
     def set_http_client(self, client: httpx.AsyncClient) -> None:
         self._http_client = client
@@ -56,13 +58,15 @@ class ChannelService:
         recipient_participant_id: UUID,
         content: str,
         metadata: Optional[dict[str, Any]] = None,
+        owner_id: Optional[UUID] = None,
     ) -> dict[str, Any]:
         """Synchronous call: send payload to recipient, wait for response.
 
         Returns a dict with the call result including the recipient's response.
         """
         sender, recipient, network = await self._validate_communication(
-            network_id, sender_participant_id, recipient_participant_id
+            network_id, sender_participant_id, recipient_participant_id,
+            owner_id=owner_id,
         )
 
         if not recipient.callback_url:
@@ -84,7 +88,7 @@ class ChannelService:
         context_entries = await self.ctx.get_context_window(network_id, limit=30)
         participants = await self.repo.list_participants(network_id)
 
-        # Build the payload with reply_url
+        # Build the payload with signed reply_url
         payload = self._build_delivery_payload(
             network_id=network_id,
             sender=sender,
@@ -135,6 +139,7 @@ class ChannelService:
         recipient_participant_id: UUID,
         content: str,
         metadata: Optional[dict[str, Any]] = None,
+        owner_id: Optional[UUID] = None,
     ) -> NetworkMessage:
         """Non-blocking message: record and push via webhook.
 
@@ -142,9 +147,11 @@ class ChannelService:
         is best-effort with retries handled by the delivery worker.
         """
         sender, recipient, network = await self._validate_communication(
-            network_id, sender_participant_id, recipient_participant_id
+            network_id, sender_participant_id, recipient_participant_id,
+            owner_id=owner_id,
         )
 
+        # Record message and attempt delivery in one logical operation
         message = await self._record_message(
             network_id=network_id,
             sender=sender,
@@ -177,10 +184,14 @@ class ChannelService:
                 message.status = MessageStatus.delivered
             except Exception:
                 logger.warning(
-                    "Message delivery failed for participant %s; will retry",
+                    "Message delivery failed for participant %s; enqueuing for retry",
                     recipient_participant_id,
                 )
                 message.status = MessageStatus.pending
+                # Enqueue for retry via delivery worker
+                await self._enqueue_delivery(
+                    recipient.callback_url, payload, str(message.id)
+                )
             await self.repo.update_message(message)
 
         return message
@@ -194,10 +205,12 @@ class ChannelService:
         recipient_participant_id: UUID,
         content: str,
         metadata: Optional[dict[str, Any]] = None,
+        owner_id: Optional[UUID] = None,
     ) -> NetworkMessage:
         """Async mailbox: store message, no push delivery."""
         sender, recipient, network = await self._validate_communication(
-            network_id, sender_participant_id, recipient_participant_id
+            network_id, sender_participant_id, recipient_participant_id,
+            owner_id=owner_id,
         )
 
         return await self._record_message(
@@ -217,21 +230,35 @@ class ChannelService:
         participant_id: UUID,
         channel_types: Optional[list[str]] = None,
         limit: int = 50,
+        owner_id: Optional[UUID] = None,
     ) -> list[NetworkMessage]:
-        """Get unread messages for a participant."""
-        messages = await self.repo.list_messages(
+        """Get unread messages for a participant (recipient only)."""
+        # Verify ownership
+        if owner_id:
+            network = await self.repo.get_network(network_id)
+            if not network or network.owner_id != owner_id:
+                raise ForbiddenException("You don't own this network")
+
+        messages = await self.repo.get_inbox(
             network_id=network_id,
+            recipient_id=participant_id,
             limit=limit,
-            participant_id=participant_id,
         )
         if channel_types:
             messages = [m for m in messages if m.channel_type in channel_types]
         return messages
 
     async def acknowledge(
-        self, network_id: UUID, message_ids: list[UUID]
+        self, network_id: UUID, message_ids: list[UUID],
+        owner_id: Optional[UUID] = None,
     ) -> int:
         """Mark messages as read."""
+        # Verify ownership
+        if owner_id:
+            network = await self.repo.get_network(network_id)
+            if not network or network.owner_id != owner_id:
+                raise ForbiddenException("You don't own this network")
+
         count = 0
         for msg_id in message_ids:
             message = await self.repo.get_message(msg_id)
@@ -256,7 +283,7 @@ class ChannelService:
         """Handle a proactive message from an external agent via callback URL.
 
         This is the key to bidirectionality: external agents POST to their
-        reply_url and this method records the message in the network.
+        signed reply_url and this method records the message in the network.
         """
         # Safety check: reject if platform is in emergency halt
         from src.services.safety import check_platform_halt
@@ -290,31 +317,11 @@ class ChannelService:
 
         # If there's a specific recipient with a callback_url, forward the message
         if recipient and recipient.callback_url and channel_type == "message":
-            context_entries = await self.ctx.get_context_window(network_id, limit=20)
-            participants = await self.repo.list_participants(network_id)
-            payload = self._build_delivery_payload(
-                network_id=network_id,
-                sender=sender,
-                recipient=recipient,
-                channel=channel_type,
-                content=content,
-                context=context_entries,
-                participants=participants,
-                message_id=message.id,
+            await self._forward_to_participant(
+                network_id, sender, recipient, channel_type, content, message.id
             )
-            try:
-                await self._deliver_http(
-                    recipient.callback_url,
-                    payload,
-                    timeout=settings.NETWORK_CALLBACK_TIMEOUT_SECONDS,
-                )
-                message.status = MessageStatus.delivered
-                await self.repo.update_message(message)
-            except Exception:
-                logger.warning(
-                    "Forwarding callback message failed for participant %s",
-                    recipient_participant_id,
-                )
+            message.status = MessageStatus.delivered
+            await self.repo.update_message(message)
 
         return message
 
@@ -325,6 +332,7 @@ class ChannelService:
         network_id: UUID,
         sender_id: UUID,
         recipient_id: UUID,
+        owner_id: Optional[UUID] = None,
     ) -> tuple[NetworkParticipant, NetworkParticipant, CommunicationNetwork]:
         # Safety check: reject if platform is in emergency halt
         from src.services.safety import check_agent_active, check_platform_halt
@@ -335,6 +343,10 @@ class ChannelService:
             raise NotFoundException("Network")
         if network.status != NetworkStatus.active:
             raise BadRequestException("Network is not active")
+
+        # Ownership check: verify the calling user owns this network
+        if owner_id and network.owner_id != owner_id:
+            raise ForbiddenException("You don't own this network")
 
         sender = await self.repo.get_participant(sender_id)
         if not sender or sender.network_id != network_id:
@@ -353,6 +365,10 @@ class ChannelService:
             await check_agent_active(sender.agent_id)
         if recipient.agent_id:
             await check_agent_active(recipient.agent_id)
+
+        # Topology validation: enforce communication constraints
+        participants = await self.repo.list_participants(network_id)
+        self._topology.validate(network, sender, recipient, participants)
 
         return sender, recipient, network
 
@@ -401,6 +417,15 @@ class ChannelService:
         message_id: UUID,
     ) -> dict[str, Any]:
         """Build the standard payload delivered to external agents."""
+        # Build the signed reply_url
+        raw_reply_url = (
+            f"{settings.BASE_URL}/networks/{network_id}"
+            f"/participants/{recipient.id}/callback"
+        )
+        signed_reply_url = sign_callback_url(
+            raw_reply_url, network_id, recipient.id
+        )
+
         return {
             "network_id": str(network_id),
             "message_id": str(message_id),
@@ -411,16 +436,65 @@ class ChannelService:
             },
             "content": content,
             "context": context,
-            "reply_url": (
-                f"{settings.BASE_URL}/networks/{network_id}"
-                f"/participants/{recipient.id}/callback"
-            ),
+            "reply_url": signed_reply_url,
             "network_participants": [
                 {"participant_id": str(p.id), "name": p.name}
                 for p in participants
                 if p.status == ParticipantStatus.active
             ],
         }
+
+    async def _forward_to_participant(
+        self,
+        network_id: UUID,
+        sender: NetworkParticipant,
+        recipient: NetworkParticipant,
+        channel_type: str,
+        content: str,
+        message_id: UUID,
+    ) -> None:
+        """Forward a message to a participant with a callback_url."""
+        context_entries = await self.ctx.get_context_window(network_id, limit=20)
+        participants = await self.repo.list_participants(network_id)
+        payload = self._build_delivery_payload(
+            network_id=network_id,
+            sender=sender,
+            recipient=recipient,
+            channel=channel_type,
+            content=content,
+            context=context_entries,
+            participants=participants,
+            message_id=message_id,
+        )
+        try:
+            await self._deliver_http(
+                recipient.callback_url,
+                payload,
+                timeout=settings.NETWORK_CALLBACK_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            logger.warning(
+                "Forwarding callback message failed for participant %s",
+                recipient.id,
+            )
+
+    async def _enqueue_delivery(
+        self, callback_url: str, payload: dict, message_id: str
+    ) -> None:
+        """Enqueue a failed delivery for retry via the delivery worker."""
+        try:
+            from src.network.utils.delivery_worker import DeliveryWorker
+            redis = self.ctx._redis
+            await DeliveryWorker.enqueue(
+                redis,
+                callback_url=callback_url,
+                payload=payload,
+                message_id=message_id,
+            )
+        except Exception:
+            logger.warning(
+                "Failed to enqueue delivery for retry (message %s)", message_id
+            )
 
     async def _deliver_http(
         self,

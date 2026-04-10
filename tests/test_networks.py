@@ -19,8 +19,16 @@ import uuid
 import httpx
 import pytest
 
+from src.network.utils.callback_auth import sign_callback_url
+
 BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:8000")
 TIMEOUT = 15
+
+
+def _signed_callback_url(network_id: str, participant_id: str) -> str:
+    """Generate a signed callback URL for testing."""
+    raw = f"{BASE_URL}/networks/{network_id}/participants/{participant_id}/callback"
+    return sign_callback_url(raw, uuid.UUID(network_id), uuid.UUID(participant_id))
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -294,9 +302,10 @@ async def test_callback_bidirectional(authed):
     assert resp.status_code == 201
     original_msg_id = resp.json()["id"]
 
-    # Agent B responds proactively via callback (no auth required)
+    # Agent B responds proactively via signed callback URL
+    callback_url = _signed_callback_url(network_id, agent_b_id)
     resp = await client.post(
-        f"{BASE_URL}/networks/{network_id}/participants/{agent_b_id}/callback",
+        callback_url,
         json={
             "content": "Analysis complete. Found 3 anomalies.",
             "recipient_participant_id": agent_a_id,
@@ -370,9 +379,10 @@ async def test_multi_participant_context(authed):
         },
     )
 
-    # C → A (proactive via callback)
+    # C → A (proactive via signed callback)
+    callback_url = _signed_callback_url(network_id, participant_ids["Persona C"])
     await client.post(
-        f"{BASE_URL}/networks/{network_id}/participants/{participant_ids['Persona C']}/callback",
+        callback_url,
         json={
             "content": "Thanks for including me! I have some ideas to share.",
             "recipient_participant_id": participant_ids["Persona A"],

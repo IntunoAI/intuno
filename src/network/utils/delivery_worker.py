@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -61,6 +62,7 @@ class DeliveryWorker:
         payload: dict[str, Any],
         message_id: str,
         attempt: int = 0,
+        deliver_after: float = 0,
     ) -> None:
         """Enqueue a delivery task into the Redis Stream."""
         await redis.xadd(
@@ -70,6 +72,7 @@ class DeliveryWorker:
                 "payload": json.dumps(payload, default=str),
                 "message_id": message_id,
                 "attempt": str(attempt),
+                "deliver_after": str(deliver_after),
             },
         )
 
@@ -99,6 +102,14 @@ class DeliveryWorker:
         payload_raw = data.get("payload", "{}")
         message_id = data.get("message_id", "")
         attempt = int(data.get("attempt", "0"))
+        deliver_after = float(data.get("deliver_after", "0"))
+
+        # Respect delayed delivery (for exponential backoff retries)
+        if deliver_after > 0:
+            now = time.time()
+            if now < deliver_after:
+                delay = min(deliver_after - now, 60)
+                await asyncio.sleep(delay)
 
         try:
             payload = json.loads(payload_raw)
@@ -110,6 +121,7 @@ class DeliveryWorker:
         )
         owns_client = self._http_client is None
 
+        delivered = False
         try:
             response = await client.post(
                 callback_url,
@@ -122,6 +134,7 @@ class DeliveryWorker:
             )
             if response.status_code == 200:
                 logger.debug("Delivered message %s to %s", message_id, callback_url)
+                delivered = True
             else:
                 logger.warning(
                     "Delivery to %s returned %d for message %s",
@@ -129,7 +142,6 @@ class DeliveryWorker:
                     response.status_code,
                     message_id,
                 )
-                await self._maybe_retry(data, attempt)
         except Exception:
             logger.warning(
                 "Delivery to %s failed for message %s (attempt %d)",
@@ -137,21 +149,47 @@ class DeliveryWorker:
                 message_id,
                 attempt,
             )
-            await self._maybe_retry(data, attempt)
         finally:
             if owns_client:
                 await client.aclose()
 
-        await self._redis.xack(STREAM_KEY, CONSUMER_GROUP, stream_id)
+        if delivered:
+            # ACK only on successful delivery
+            await self._redis.xack(STREAM_KEY, CONSUMER_GROUP, stream_id)
+        else:
+            # Attempt retry with exponential backoff
+            retried = await self._maybe_retry(data, attempt)
+            if retried:
+                # Re-enqueue succeeded — ACK the original to prevent duplicate
+                await self._redis.xack(STREAM_KEY, CONSUMER_GROUP, stream_id)
+            # If retry failed, don't ACK — consumer group will redeliver
 
-    async def _maybe_retry(self, data: dict[str, str], attempt: int) -> None:
-        if attempt < settings.NETWORK_MESSAGE_DELIVERY_MAX_RETRIES:
-            backoff = 2 ** (attempt + 1)
-            await asyncio.sleep(backoff)
+    async def _maybe_retry(self, data: dict[str, str], attempt: int) -> bool:
+        """Re-enqueue for retry with exponential backoff. Returns True on success."""
+        if attempt >= settings.NETWORK_MESSAGE_DELIVERY_MAX_RETRIES:
+            logger.error(
+                "Max retries reached for message %s to %s",
+                data.get("message_id", ""),
+                data.get("callback_url", ""),
+            )
+            return False
+
+        backoff = 2 ** (attempt + 1)
+        deliver_at = time.time() + backoff
+
+        try:
             await self.enqueue(
                 self._redis,
                 callback_url=data.get("callback_url", ""),
                 payload=json.loads(data.get("payload", "{}")),
                 message_id=data.get("message_id", ""),
                 attempt=attempt + 1,
+                deliver_after=deliver_at,
             )
+            return True
+        except Exception:
+            logger.warning(
+                "Failed to re-enqueue delivery for message %s",
+                data.get("message_id", ""),
+            )
+            return False

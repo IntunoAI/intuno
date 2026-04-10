@@ -195,6 +195,7 @@ async def import_a2a_agent(
     data: A2AImportRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
+    discovery_service: "A2ADiscoveryService" = Depends(get_discovery_service),
 ) -> JSONResponse:
     """Import an external A2A agent as a first-class Intuno agent.
 
@@ -202,7 +203,6 @@ async def import_a2a_agent(
     generates embeddings, and indexes in Qdrant. The agent becomes fully
     discoverable and invocable — just like any natively registered agent.
     """
-    discovery_service = await _get_discovery_service(request)
     discovery_service.set_http_client(request.app.state.http_client)
 
     try:
@@ -230,9 +230,9 @@ async def import_a2a_agents_batch(
     data: A2ABatchImportRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
+    discovery_service: "A2ADiscoveryService" = Depends(get_discovery_service),
 ) -> JSONResponse:
     """Import multiple external A2A agents in one request."""
-    discovery_service = await _get_discovery_service(request)
     discovery_service.set_http_client(request.app.state.http_client)
 
     results = await discovery_service.import_multiple(data.urls, current_user.id)
@@ -244,9 +244,9 @@ async def refresh_a2a_agent(
     agent_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
+    discovery_service: "A2ADiscoveryService" = Depends(get_discovery_service),
 ) -> JSONResponse:
     """Re-fetch the Agent Card and update the registry entry."""
-    discovery_service = await _get_discovery_service(request)
     discovery_service.set_http_client(request.app.state.http_client)
 
     agent = await discovery_service.registry_repository.get_agent_by_agent_id(agent_id)
@@ -277,9 +277,9 @@ async def fetch_agent_card_preview(
     url: str,
     request: Request,
     current_user: User = Depends(get_current_user),
+    discovery_service: "A2ADiscoveryService" = Depends(get_discovery_service),
 ) -> JSONResponse:
     """Preview an A2A Agent Card without importing it."""
-    discovery_service = await _get_discovery_service(request)
     discovery_service.set_http_client(request.app.state.http_client)
 
     card = await discovery_service.fetch_agent_card(url)
@@ -291,14 +291,19 @@ async def fetch_agent_card_preview(
     return JSONResponse({"success": True, "card": card})
 
 
-async def _get_discovery_service(request: Request):
-    """Helper to build a discovery service from request context."""
+def get_discovery_service(
+    registry: RegistryRepository = Depends(),
+) -> "A2ADiscoveryService":
+    """FastAPI dependency that provides a properly-scoped discovery service.
+
+    Uses the request-scoped DB session from Depends() to avoid connection
+    leaks (fixes: previous version created AsyncSessionLocal() without
+    closing it).
+    """
     from src.network.a2a.discovery import A2ADiscoveryService
-    from src.database import AsyncSessionLocal
     from src.utilities.embedding import EmbeddingService
 
-    session = AsyncSessionLocal()
     return A2ADiscoveryService(
-        registry_repository=RegistryRepository(session=session),
+        registry_repository=registry,
         embedding_service=EmbeddingService(),
     )

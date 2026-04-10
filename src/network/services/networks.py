@@ -96,6 +96,9 @@ class NetworkService:
             raise BadRequestException(
                 "Participant must have a callback_url or polling_enabled"
             )
+        if data.callback_url:
+            from src.network.utils.url_validator import validate_callback_url
+            validate_callback_url(data.callback_url)
         if data.agent_id:
             existing = await self.repo.get_participant_by_agent(network_id, data.agent_id)
             if existing:
