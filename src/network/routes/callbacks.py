@@ -2,18 +2,26 @@
 
 This is the key endpoint that enables bidirectional communication.
 When Intuno delivers a message to an external agent, the payload includes
-a ``reply_url`` pointing to this endpoint.  The agent can POST back to
-proactively send messages into the network.
+a signed ``reply_url`` pointing to this endpoint.  The agent can POST back
+to proactively send messages into the network.
+
+The reply_url is HMAC-signed so only the intended recipient can use it.
 """
 
 from typing import Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 
-from src.network.models.schemas import NetworkMessageResponse
+from src.exceptions import ForbiddenException
+from src.network.models.schemas import (
+    MAX_CONTENT_LENGTH,
+    ChannelLiteral,
+    NetworkMessageResponse,
+)
 from src.network.services.channels import ChannelService
+from src.network.utils.callback_auth import verify_callback_signature
 
 router = APIRouter(prefix="/networks", tags=["Callbacks"])
 
@@ -21,9 +29,9 @@ router = APIRouter(prefix="/networks", tags=["Callbacks"])
 class CallbackPayload(BaseModel):
     """Payload an external agent sends to its reply_url."""
 
-    content: str
+    content: str = Field(..., max_length=MAX_CONTENT_LENGTH)
     recipient_participant_id: Optional[UUID] = None
-    channel_type: str = Field(default="message", description="message | call | mailbox")
+    channel_type: ChannelLiteral = Field(default="message")
     metadata: Optional[dict[str, Any]] = None
     in_reply_to_id: Optional[UUID] = None
 
@@ -37,19 +45,23 @@ async def receive_callback(
     participant_id: UUID,
     data: CallbackPayload,
     request: Request,
+    sig: str = Query(..., description="HMAC signature from the signed reply_url"),
+    exp: str = Query(..., description="Expiry timestamp from the signed reply_url"),
     service: ChannelService = Depends(),
 ) -> NetworkMessageResponse:
     """Receive a proactive message from an external agent.
 
-    No authentication required — the reply_url itself acts as a capability
-    token.  The participant_id in the URL identifies the sender.
+    Authentication is via the HMAC-signed reply_url — the ``sig`` and
+    ``exp`` query parameters are validated before processing.
 
     The external agent can:
     - Reply to a specific message (in_reply_to_id)
     - Target a specific recipient (recipient_participant_id)
-    - Broadcast to the network (omit recipient_participant_id)
     - Choose a channel type (call/message/mailbox)
     """
+    if not verify_callback_signature(network_id, participant_id, sig, exp):
+        raise ForbiddenException("Invalid or expired callback signature")
+
     service.set_http_client(request.app.state.http_client)
     return await service.handle_callback(
         network_id=network_id,

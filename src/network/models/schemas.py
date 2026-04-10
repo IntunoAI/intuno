@@ -1,10 +1,22 @@
 """Pydantic request/response schemas for communication networks."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# ── Shared type aliases ─────────────────────────────────────────────
+
+TopologyLiteral = Literal["mesh", "star", "ring", "custom"]
+ChannelLiteral = Literal["call", "message", "mailbox"]
+NetworkStatusLiteral = Literal["active", "paused", "closed"]
+ParticipantTypeLiteral = Literal["agent", "persona", "orchestrator"]
+ParticipantStatusLiteral = Literal["active", "disconnected", "removed"]
+MessageStatusLiteral = Literal["pending", "delivered", "read", "failed"]
+
+# Maximum content size for messages (64 KB)
+MAX_CONTENT_LENGTH = 65536
 
 
 # ── Network schemas ──────────────────────────────────────────────────
@@ -12,14 +24,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class NetworkCreate(BaseModel):
     name: str = Field(..., max_length=255)
-    topology_type: str = Field(default="mesh", description="mesh | star | ring | custom")
+    topology_type: TopologyLiteral = Field(default="mesh")
     metadata: Optional[dict[str, Any]] = None
 
 
 class NetworkUpdate(BaseModel):
     name: Optional[str] = Field(default=None, max_length=255)
-    topology_type: Optional[str] = None
-    status: Optional[str] = None
+    topology_type: Optional[TopologyLiteral] = None
+    status: Optional[NetworkStatusLiteral] = None
     metadata: Optional[dict[str, Any]] = None
 
 
@@ -41,7 +53,7 @@ class NetworkResponse(BaseModel):
 
 class ParticipantJoin(BaseModel):
     agent_id: Optional[UUID] = None
-    participant_type: str = Field(default="agent", description="agent | persona | orchestrator")
+    participant_type: ParticipantTypeLiteral = Field(default="agent")
     name: str = Field(..., max_length=255)
     callback_url: Optional[str] = None
     polling_enabled: bool = False
@@ -52,7 +64,7 @@ class ParticipantUpdate(BaseModel):
     callback_url: Optional[str] = None
     polling_enabled: Optional[bool] = None
     capabilities: Optional[dict[str, Any]] = None
-    status: Optional[str] = None
+    status: Optional[ParticipantStatusLiteral] = None
 
 
 class ParticipantResponse(BaseModel):
@@ -76,8 +88,8 @@ class ParticipantResponse(BaseModel):
 
 class NetworkMessageCreate(BaseModel):
     recipient_participant_id: Optional[UUID] = None
-    channel_type: str = Field(..., description="call | message | mailbox")
-    content: str
+    channel_type: ChannelLiteral = Field(...)
+    content: str = Field(..., max_length=MAX_CONTENT_LENGTH)
     metadata: Optional[dict[str, Any]] = None
     in_reply_to_id: Optional[UUID] = None
 
@@ -98,6 +110,29 @@ class NetworkMessageResponse(BaseModel):
     updated_at: datetime
 
 
+# ── Channel request/response (shared by call, message, mailbox) ─────
+
+
+class ChannelRequest(BaseModel):
+    """Shared request schema for all channel operations."""
+    sender_participant_id: UUID
+    recipient_participant_id: UUID
+    content: str = Field(..., max_length=MAX_CONTENT_LENGTH)
+    metadata: Optional[dict[str, Any]] = None
+
+
+class CallResponse(BaseModel):
+    """Response from a synchronous call."""
+    success: bool
+    message_id: str
+    response: Any
+
+
+class AckResponse(BaseModel):
+    """Response from message acknowledgment."""
+    acknowledged: int
+
+
 # ── Context snapshot ─────────────────────────────────────────────────
 
 
@@ -106,6 +141,7 @@ class ContextEntry(BaseModel):
     recipient: Optional[str] = None
     channel: str
     content: str
+    message_id: Optional[str] = None
     timestamp: datetime
 
 

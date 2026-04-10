@@ -40,7 +40,7 @@ Every message exchanged within a network is recorded and accumulated. When Intun
 
 ### The `reply_url` Pattern
 
-When Intuno delivers any communication to an external agent, the payload includes a `reply_url`:
+When Intuno delivers any communication to an external agent, the payload includes a signed `reply_url`:
 
 ```json
 {
@@ -53,9 +53,9 @@ When Intuno delivers any communication to an external agent, the payload include
   },
   "content": "Please review this draft...",
   "context": [
-    {"sender": "User", "recipient": "Writer Agent", "channel": "message", "content": "...", "timestamp": 1711900000}
+    {"sender": "User", "recipient": "Writer Agent", "channel": "message", "content": "...", "message_id": "uuid", "timestamp": 1711900000}
   ],
-  "reply_url": "https://api.intuno.net/networks/{id}/participants/{pid}/callback",
+  "reply_url": "https://api.intuno.net/networks/{id}/participants/{pid}/callback?sig=abc123...&exp=1712000000",
   "network_participants": [
     {"participant_id": "uuid", "name": "Writer Agent"},
     {"participant_id": "uuid", "name": "Reviewer Agent"}
@@ -63,7 +63,15 @@ When Intuno delivers any communication to an external agent, the payload include
 }
 ```
 
-The external agent can POST back to the `reply_url` to proactively send messages into the network. No authentication is required on the callback — the URL itself acts as a capability token.
+The external agent can POST back to the `reply_url` to proactively send messages into the network. The callback URL is HMAC-SHA256 signed — the `sig` and `exp` query parameters are validated server-side. Signatures expire after 24 hours (configurable). The agent does not need to compute signatures; just POST to the URL as provided.
+
+### Security
+
+- **Callback authentication**: Reply URLs are HMAC-SHA256 signed (`src/network/utils/callback_auth.py`). Invalid or expired signatures are rejected with 403.
+- **Ownership checks**: All channel operations verify the calling user owns the network. Authenticated users cannot send messages in networks they don't own.
+- **SSRF protection**: Callback URLs are validated against private IP ranges (10.x, 172.16.x, 192.168.x, 127.x, 169.254.x, IPv6 loopback/ULA). HTTPS is required in production.
+- **Content limits**: All message content is capped at 65,536 characters.
+- **Topology enforcement**: Communication constraints (star hub-only, ring sequential) are enforced at the service layer — invalid sends return 400.
 
 ---
 
@@ -138,13 +146,19 @@ Networks support four topology types that constrain communication patterns:
 3. Agent A sends message to Agent B
    POST /networks/{id}/messages/send
      → Record in DB + Redis context
-     → POST to Agent B's callback_url (with context + reply_url)
+     → POST to Agent B's callback_url (with context + signed reply_url)
+     → If delivery fails → enqueue for retry via DeliveryWorker (Redis Streams)
 
 4. Agent B responds proactively
-   POST /networks/{id}/participants/{B}/callback
+   POST /networks/{id}/participants/{B}/callback?sig=...&exp=...
+     → Verify HMAC signature (reject if invalid/expired)
      → Record in DB + Redis context
      → Forward to Agent A if targeted (with updated context)
 ```
+
+### Delivery Worker
+
+Failed webhook deliveries are automatically retried by a background worker (`src/network/utils/delivery_worker.py`) that consumes from a Redis Stream. Retries use exponential backoff (2, 4, 8 seconds) with a configurable maximum (default: 3 retries). The worker starts automatically with the application.
 
 ---
 
@@ -207,27 +221,29 @@ src/network/
 ├── __init__.py
 ├── models/
 │   ├── entities.py         # CommunicationNetwork, NetworkParticipant, NetworkMessage
-│   └── schemas.py          # Pydantic request/response schemas
+│   └── schemas.py          # Pydantic request/response schemas (Literal types, content limits)
 ├── repositories/
-│   └── networks.py         # CRUD + context retrieval
+│   └── networks.py         # CRUD + context retrieval + get_inbox (unread/recipient-only)
 ├── services/
-│   ├── networks.py         # Network management + message recording
-│   └── channels.py         # Calls, messages, mailboxes, callbacks
+│   ├── networks.py         # Network management + SSRF-safe URL validation on join
+│   └── channels.py         # Calls, messages, mailboxes, callbacks + ownership checks + topology
 ├── routes/
 │   ├── networks.py         # Network + participant + context endpoints
 │   ├── channels.py         # Call/message/mailbox/inbox endpoints
-│   └── callbacks.py        # External agent callback receiver
+│   └── callbacks.py        # HMAC-authenticated callback receiver
 ├── utils/
-│   ├── context_manager.py  # Redis Streams context accumulator
-│   ├── delivery_worker.py  # Background message delivery (Redis Streams consumer)
-│   ├── topology.py         # Topology validation and routing
+│   ├── callback_auth.py    # HMAC-SHA256 signed reply_url generation and verification
+│   ├── url_validator.py    # SSRF-safe URL validation (rejects private IPs)
+│   ├── context_manager.py  # Redis Streams context accumulator (includes message_id)
+│   ├── delivery_worker.py  # Background retry worker (Redis Streams consumer, exponential backoff)
+│   ├── topology.py         # Topology validation (mesh, star, ring, custom)
 │   ├── convergence.py      # Convergence detectors for loops
 │   └── aggregator.py       # Fan-in aggregation strategies
 └── a2a/
     ├── agent_card.py       # A2A Agent Card generation
     ├── protocol.py         # A2A ↔ Intuno format translation
-    ├── discovery.py        # Fetch + import external A2A agents
-    └── routes.py           # A2A-compatible API endpoints
+    ├── discovery.py        # Fetch + import external A2A agents (with URL validation)
+    └── routes.py           # A2A-compatible API endpoints (session-safe via Depends)
 ```
 
 ---
