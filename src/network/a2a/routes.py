@@ -68,6 +68,7 @@ async def a2a_task_send(
     data: A2ATaskSendRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
+    discovery_service: "A2ADiscoveryService" = Depends(get_discovery_service),
 ) -> JSONResponse:
     """A2A-compatible task send endpoint.
 
@@ -75,9 +76,7 @@ async def a2a_task_send(
     processes it, and returns the result in A2A format.
     """
     from src.network.services.channels import ChannelService
-    from src.network.repositories.networks import NetworkRepository
     from src.network.utils.context_manager import NetworkContextManager
-    from src.database import get_redis
 
     # Safety check: reject if platform is in emergency halt
     from src.services.safety import check_platform_halt
@@ -102,16 +101,16 @@ async def a2a_task_send(
     # Convert A2A task to Intuno message format
     intuno_msg = a2a_task_to_intuno_message(task_data)
 
-    # Process through the channel service
-    try:
-        redis = request.app.state.redis
-        repo = NetworkRepository(
-            session=(await request.app.state.db_session_factory()).__aenter__()
-        )
-        ctx_manager = NetworkContextManager(redis)
-        channel_service = ChannelService(repo=repo, context_manager=ctx_manager)
-        channel_service.set_http_client(request.app.state.http_client)
+    # Use the request-scoped session from the discovery service dependency
+    from src.network.repositories.networks import NetworkRepository
 
+    redis = request.app.state.redis
+    repo = NetworkRepository(session=discovery_service.registry_repository.session)
+    ctx_manager = NetworkContextManager(redis)
+    channel_service = ChannelService(repo=repo, context_manager=ctx_manager)
+    channel_service.set_http_client(request.app.state.http_client)
+
+    try:
         channel_type = intuno_msg.get("channel_type", "message")
 
         if channel_type == "call" and recipient_participant_id:
@@ -121,8 +120,8 @@ async def a2a_task_send(
                 recipient_participant_id=UUID(recipient_participant_id),
                 content=intuno_msg["content"],
                 metadata=intuno_msg.get("metadata"),
+                owner_id=current_user.id,
             )
-            # Convert result back to A2A task format
             a2a_result = {
                 "id": result.get("message_id"),
                 "status": {"state": "completed"},
@@ -141,6 +140,7 @@ async def a2a_task_send(
                 recipient_participant_id=UUID(recipient_participant_id),
                 content=intuno_msg["content"],
                 metadata=intuno_msg.get("metadata"),
+                owner_id=current_user.id,
             )
             a2a_result = intuno_message_to_a2a_task(
                 {
@@ -155,10 +155,10 @@ async def a2a_task_send(
 
         return JSONResponse(build_a2a_json_rpc_response(a2a_result, data.id))
 
-    except Exception as exc:
+    except (ValueError, KeyError) as exc:
         return JSONResponse(
-            build_a2a_json_rpc_error(-32603, str(exc), data.id),
-            status_code=500,
+            build_a2a_json_rpc_error(-32602, str(exc), data.id),
+            status_code=400,
         )
 
 
