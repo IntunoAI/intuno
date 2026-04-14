@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Configuration
     API_VERSION: str = "v1"
-    BASE_URL: str = "https://api.intuno.ai"
+    BASE_URL: str = "https://api.intuno.net"
     CORS_ORIGINS: list[str] = ["*"]
     LOG_LEVEL: str = "DEBUG"
     ENVIRONMENT: str = "development"

@@ -27,6 +27,24 @@ from src.repositories.registry import RegistryRepository
 router = APIRouter(prefix="/a2a", tags=["A2A"])
 
 
+def get_discovery_service(
+    registry: RegistryRepository = Depends(),
+) -> "A2ADiscoveryService":
+    """FastAPI dependency that provides a properly-scoped discovery service.
+
+    Uses the request-scoped DB session from Depends() to avoid connection
+    leaks (fixes: previous version created AsyncSessionLocal() without
+    closing it).
+    """
+    from src.network.a2a.discovery import A2ADiscoveryService
+    from src.utilities.embedding import EmbeddingService
+
+    return A2ADiscoveryService(
+        registry_repository=registry,
+        embedding_service=EmbeddingService(),
+    )
+
+
 # ── Agent Card endpoints ─────────────────────────────────────────────
 
 
@@ -289,21 +307,3 @@ async def fetch_agent_card_preview(
             status_code=404,
         )
     return JSONResponse({"success": True, "card": card})
-
-
-def get_discovery_service(
-    registry: RegistryRepository = Depends(),
-) -> "A2ADiscoveryService":
-    """FastAPI dependency that provides a properly-scoped discovery service.
-
-    Uses the request-scoped DB session from Depends() to avoid connection
-    leaks (fixes: previous version created AsyncSessionLocal() without
-    closing it).
-    """
-    from src.network.a2a.discovery import A2ADiscoveryService
-    from src.utilities.embedding import EmbeddingService
-
-    return A2ADiscoveryService(
-        registry_repository=registry,
-        embedding_service=EmbeddingService(),
-    )

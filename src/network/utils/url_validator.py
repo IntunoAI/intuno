@@ -80,6 +80,15 @@ def validate_callback_url(url: str) -> str:
     if not parsed.hostname:
         raise BadRequestException("Callback URL must include a hostname")
 
+    # Check allowlist before rejecting private IPs (supports local dev)
+    allowed_hosts = [
+        h.strip()
+        for h in settings.INVOKE_ENDPOINT_ALLOWED_HOSTS.split(",")
+        if h.strip()
+    ]
+    if allowed_hosts and parsed.hostname.lower() in (h.lower() for h in allowed_hosts):
+        return url
+
     # Reject private/internal IPs
     if _is_private_ip(parsed.hostname):
         raise BadRequestException(
