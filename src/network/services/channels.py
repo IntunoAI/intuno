@@ -7,6 +7,7 @@ delivered to the recipient via the appropriate mechanism.
 
 import json
 import logging
+import time
 from typing import Any, Optional
 from uuid import UUID
 
@@ -105,6 +106,8 @@ class ChannelService:
             recipient.callback_url,
             payload,
             timeout=settings.NETWORK_CALLBACK_TIMEOUT_SECONDS,
+            recipient=recipient,
+            owner_id=owner_id,
         )
 
         # Record the response as a message from recipient back to sender
@@ -180,6 +183,8 @@ class ChannelService:
                     recipient.callback_url,
                     payload,
                     timeout=settings.NETWORK_CALLBACK_TIMEOUT_SECONDS,
+                    recipient=recipient,
+                    owner_id=owner_id,
                 )
                 message.status = MessageStatus.delivered
             except Exception:
@@ -467,10 +472,14 @@ class ChannelService:
             message_id=message_id,
         )
         try:
+            # Get network owner for invocation logging
+            network = await self.repo.get_network(network_id)
             await self._deliver_http(
                 recipient.callback_url,
                 payload,
                 timeout=settings.NETWORK_CALLBACK_TIMEOUT_SECONDS,
+                recipient=recipient,
+                owner_id=network.owner_id if network else None,
             )
         except Exception:
             logger.warning(
@@ -501,6 +510,9 @@ class ChannelService:
         url: str,
         payload: dict[str, Any],
         timeout: int = 30,
+        *,
+        recipient: Optional["NetworkParticipant"] = None,
+        owner_id: Optional[UUID] = None,
     ) -> dict[str, Any]:
         """POST payload to an external agent's callback URL."""
         client = self._http_client
@@ -508,6 +520,9 @@ class ChannelService:
         if owns_client:
             client = httpx.AsyncClient(timeout=timeout)
 
+        start = time.monotonic()
+        status_code = 0
+        response_data: dict[str, Any] = {}
         try:
             response = await client.post(
                 url,
@@ -518,11 +533,13 @@ class ChannelService:
                 },
                 timeout=timeout,
             )
+            status_code = response.status_code
             if response.status_code == 200:
                 try:
-                    return response.json()
+                    response_data = response.json()
                 except Exception:
-                    return {"raw_response": response.text}
+                    response_data = {"raw_response": response.text}
+                return response_data
             else:
                 raise httpx.HTTPStatusError(
                     f"Callback returned {response.status_code}",
@@ -530,5 +547,43 @@ class ChannelService:
                     response=response,
                 )
         finally:
+            latency_ms = int((time.monotonic() - start) * 1000)
             if owns_client:
                 await client.aclose()
+            # Log as invocation for quality metrics
+            if recipient and recipient.agent_id:
+                try:
+                    await self._log_invocation(
+                        agent_id=recipient.agent_id,
+                        owner_id=owner_id,
+                        payload=payload,
+                        response=response_data,
+                        status_code=status_code,
+                        latency_ms=latency_ms,
+                    )
+                except Exception:
+                    logger.debug("Failed to log network invocation", exc_info=True)
+
+    async def _log_invocation(
+        self,
+        agent_id: UUID,
+        owner_id: Optional[UUID],
+        payload: dict,
+        response: dict,
+        status_code: int,
+        latency_ms: int,
+    ) -> None:
+        """Record a network callback delivery as an invocation log entry."""
+        from src.models.invocation_log import InvocationLog
+        from src.repositories.invocation_log import InvocationLogRepository
+
+        repo = InvocationLogRepository(self.repo.session)
+        log_entry = InvocationLog(
+            caller_user_id=owner_id,
+            target_agent_id=agent_id,
+            request_payload={"channel": payload.get("channel"), "content_length": len(payload.get("content", ""))},
+            response_payload=response if response else None,
+            status_code=status_code or 0,
+            latency_ms=latency_ms,
+        )
+        await repo.create_invocation_log(log_entry)
