@@ -107,6 +107,15 @@ class Settings(BaseSettings):
     SAFETY_CHECK_ENABLED: bool = True
     AGENT_STATUS_CACHE_TTL: int = 300  # seconds to cache agent active status in Redis
 
+    # ── Intuno Personal (hosted entity service — wisdom-agents proxy) ──
+    # wisdom proxies /personal/entities/* to wisdom-agents, which is a
+    # private internal service (never exposed to the public internet).
+    INTUNO_AGENTS_BASE_URL: str = "http://localhost:8001"
+    INTUNO_AGENTS_API_KEY: str = ""  # shared secret; the same AGENTS_API_KEY from wisdom-agents
+    INTUNO_AGENTS_TIMEOUT_SECONDS: float = 30.0
+    INTUNO_AGENTS_CHAT_TIMEOUT_SECONDS: float = 60.0  # chat waits on LLM response
+    PERSONAL_FREE_TIER_ENTITY_CAP: int = 1  # entities allowed on Free plan — Pro is handled separately
+
     # ── Economy settings (from agent-economy) ──────────────────────────
     ECONOMY_WELCOME_BONUS_CREDITS: int = 500
     ECONOMY_CREDIT_PACKAGES: list[dict] = [
