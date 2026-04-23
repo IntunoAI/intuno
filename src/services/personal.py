@@ -13,17 +13,21 @@ from typing import Any, Optional
 from uuid import UUID
 
 import httpx
+from fastapi import HTTPException
 
 from src.core.settings import settings
 from src.exceptions import BadRequestException, ForbiddenException, NotFoundException
 
 
-class AgentsUpstreamError(Exception):
-    """Raised when wisdom-agents returns 5xx or is unreachable."""
+class AgentsUpstreamError(HTTPException):
+    """Raised when wisdom-agents returns 5xx / 401-from-bad-config / is unreachable.
 
-    def __init__(self, message: str, status_code: Optional[int] = None) -> None:
-        super().__init__(message)
-        self.status_code = status_code
+    Inherits from ``HTTPException`` so FastAPI surfaces it as an HTTP
+    response instead of a 500 with a raw traceback.
+    """
+
+    def __init__(self, message: str, status_code: int = 502) -> None:
+        super().__init__(status_code=status_code, detail=message)
 
 
 class PersonalAgentsClient:
@@ -83,6 +87,16 @@ class PersonalAgentsClient:
             raise AgentsUpstreamError(
                 f"wisdom-agents unreachable: {exc}", status_code=502
             ) from exc
+
+        # 401 from wisdom-agents means our shared API key is wrong — a server
+        # misconfig, not a user-facing auth problem. Surface as 502 with a
+        # clean message so the traceback doesn't leak.
+        if response.status_code == 401:
+            raise AgentsUpstreamError(
+                "wisdom-agents rejected the shared API key — check "
+                "INTUNO_AGENTS_API_KEY matches AGENTS_API_KEY on wisdom-agents.",
+                status_code=502,
+            )
 
         if response.status_code >= 500:
             raise AgentsUpstreamError(

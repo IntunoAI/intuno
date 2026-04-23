@@ -116,6 +116,12 @@ class Settings(BaseSettings):
     INTUNO_AGENTS_CHAT_TIMEOUT_SECONDS: float = 60.0  # chat waits on LLM response
     PERSONAL_FREE_TIER_ENTITY_CAP: int = 1  # entities allowed on Free plan — Pro is handled separately
 
+    # Service credential for wisdom-agents to make network/registry/broker
+    # calls on behalf of a specific user (the entity's owner). Not tied to
+    # any user account; set once per deployment. Paired with an X-On-Behalf-Of
+    # header containing the target user UUID. See get_current_user_or_service.
+    AGENTS_SERVICE_API_KEY: str = ""
+
     # ── Economy settings (from agent-economy) ──────────────────────────
     ECONOMY_WELCOME_BONUS_CREDITS: int = 500
     ECONOMY_CREDIT_PACKAGES: list[dict] = [

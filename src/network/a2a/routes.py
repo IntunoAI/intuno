@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from src.core.auth import get_current_user
+from src.core.auth import get_current_user_or_service as get_current_user
 from src.models.auth import User
 from src.network.a2a.agent_card import build_agent_card, build_platform_card
 from src.network.a2a.protocol import (
