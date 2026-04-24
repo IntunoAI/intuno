@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from src.core.auth import get_current_user
+from src.core.auth import get_current_user_or_service as get_current_user
 from src.exceptions import BadRequestException, ForbiddenException, NotFoundException
 from src.models.auth import User
 from src.schemas.registry import (
