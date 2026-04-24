@@ -23,7 +23,7 @@ from src.schemas.invite import (
     InviteResponse,
 )
 from src.services.invite import (
-    InviteEmailMismatchError,
+    InviteEmailRequiredError,
     InviteEmailTakenError,
     InviteError,
     InviteExhaustedError,

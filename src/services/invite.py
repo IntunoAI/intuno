@@ -39,7 +39,7 @@ class InviteExhaustedError(InviteError):
     status_code = 410
 
 
-class InviteEmailMismatchError(InviteError):
+class InviteEmailRequiredError(InviteError):
     status_code = 400
 
 
@@ -141,20 +141,14 @@ class InviteService:
             raise InviteNotFoundError(f"Invite '{token[:8]}…' not found")
         _ensure_available(invite)
 
-        # Decide the final email: invite-locked beats body.email
-        final_email: Optional[str]
-        if invite.email is not None:
-            if body.email and body.email.lower() != invite.email.lower():
-                raise InviteEmailMismatchError(
-                    "This invite is locked to a specific email address"
-                )
-            final_email = invite.email
-        else:
-            if not body.email:
-                raise InviteEmailMismatchError(
-                    "Email is required for invites that aren't pre-locked"
-                )
-            final_email = body.email
+        # Email on the invite is a pre-fill hint + notification target,
+        # not a lock. The invite URL is the secret. Redemption uses whatever
+        # email the user submits; if they didn't, fall back to the invite's.
+        final_email: Optional[str] = body.email or invite.email
+        if not final_email:
+            raise InviteEmailRequiredError(
+                "Email is required to create your account."
+            )
 
         # Create user via the existing auth flow. register_user raises
         # ValueError("User with this email already exists") which we map
